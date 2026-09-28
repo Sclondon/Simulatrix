@@ -14,6 +14,14 @@ const SIMS := [
 		color = Color("ffd166"), script = preload("res://sims/orbits.gd")},
 	{title = "Ripple Tank", blurb = "Make waves and watch them interfere.",
 		color = Color("5ec8ff"), script = preload("res://sims/waves.gd")},
+	{title = "Fluid", blurb = "Slosh, stir and pour a tank of water.",
+		color = Color("4aa8ff"), script = preload("res://sims/fluid.gd")},
+	{title = "Falling Sand", blurb = "Sand, water, fire and lava, one grain at a time.",
+		color = Color("e8b86a"), script = preload("res://sims/sand.gd")},
+	{title = "Light Bench", blurb = "Bend lasers through prisms, lenses and mirrors.",
+		color = Color("c38bff"), script = preload("res://sims/optics.gd")},
+	{title = "Charge Field", blurb = "Place charges, see the field, fling a particle through it.",
+		color = Color("ff6b6b"), script = preload("res://sims/field.gd")},
 ]
 const TOP_H := 72.0
 const TEXT := Color("dfe5f5")
@@ -288,11 +296,16 @@ func _choice_row(spec: Dictionary, accent: Color) -> Control:
 	var label := Label.new()
 	label.text = spec.label
 	box.add_child(label)
-	var row := HBoxContainer.new()
+	# Up to four options share one row; more (a palette) wrap onto several
+	var many: bool = spec.options.size() > 4
+	var row: Container = HFlowContainer.new() if many else HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
+	row.add_theme_constant_override("h_separation", 6)
+	row.add_theme_constant_override("v_separation", 6)
 	box.add_child(row)
 	var group := ButtonGroup.new()
 	var on: Callable = spec.on
+	var swatches: Array = spec.get("colors", [])
 	for i in spec.options.size():
 		var b := Button.new()
 		b.text = spec.options[i]
@@ -300,10 +313,24 @@ func _choice_row(spec: Dictionary, accent: Color) -> Control:
 		b.button_group = group
 		b.button_pressed = i == spec.value
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size.y = 52
-		b.clip_text = true
-		b.add_theme_stylebox_override("pressed", _box(accent.darkened(0.55), accent, 2))
-		b.add_theme_stylebox_override("hover_pressed", _box(accent.darkened(0.5), accent, 2))
+		b.custom_minimum_size = Vector2(88 if many else 0, 52)
+		b.clip_text = not many
+		# Narrow side padding, so four options fit across a narrow panel
+		var normal := _box(Color("1b2133"), Color("2e3854"))
+		if i < swatches.size():
+			# A palette: each button wears its colour as a stripe along the bottom
+			normal.border_color = swatches[i]
+			normal.border_width_bottom = 6
+		var pressed := _box(accent.darkened(0.55), accent, 2)
+		var hover_pressed := _box(accent.darkened(0.5), accent, 2)
+		var hover := _box(Color("232b42"), Color("3d4a6e"))
+		for s: StyleBoxFlat in [normal, pressed, hover_pressed, hover]:
+			s.content_margin_left = 4
+			s.content_margin_right = 4
+		b.add_theme_stylebox_override("normal", normal)
+		b.add_theme_stylebox_override("hover", hover)
+		b.add_theme_stylebox_override("pressed", pressed)
+		b.add_theme_stylebox_override("hover_pressed", hover_pressed)
 		b.pressed.connect(func() -> void: on.call(i))
 		row.add_child(b)
 	return box

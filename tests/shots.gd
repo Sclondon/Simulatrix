@@ -35,6 +35,9 @@ func _run() -> void:
 	await _snap("menu")
 	for i in main.SIMS.size():
 		main.open_sim(i)
-		await _frames(150)
+		await _frames(90)
+		var t0 := Time.get_ticks_usec()
+		await _frames(60)
+		print("%s: %.1f ms a frame" % [main.SIMS[i].title, (Time.get_ticks_usec() - t0) / 60000.0])
 		await _snap("sim%d" % i)
 	quit()

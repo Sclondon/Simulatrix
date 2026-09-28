@@ -10,6 +10,10 @@ Pick a simulation from the menu and poke at it; every sim has a control panel an
 | Cloth | Verlet points + distance constraints; links snap past a stretch limit. Grab or cut, wind, pins. |
 | Gravity Well | Inverse-square gravity around a draggable star, optional planet-planet gravity, merging collisions, slingshot launch with a predicted path. |
 | Ripple Tank | Fragment shader summing circular waves as complex phasors: live waves or time-averaged brightness, plus a double-slit setup. |
+| Fluid | ~600 particles with Clavet-style double density relaxation (grid-binned neighbours), drawn as metaballs: blobs summed additively in a half-size SubViewport, thresholded by `fluid.gdshader`. Stir, pour, drain, tilt gravity; water, slime or lava. |
+| Falling Sand | A cellular automaton (one byte per cell, rows with nothing moving are skipped) sent to the GPU as an R8 texture and coloured by `sand.gdshader`. Sand, water, stone, wood, fire, steam, lava, plants, oil. |
+| Light Bench | 2D ray tracing: Snell's law with total internal reflection, Schlick partial reflections, and Cauchy dispersion so white light fans into a spectrum. Prisms, lenses, blocks, flat and curved mirrors. |
+| Charge Field | Coulomb field of up to 12 charges: potential and contours in `field.gdshader`, field lines traced (RK2) from the positive charges, probe charges flung through the field. |
 
 ## Layout
 
