@@ -447,6 +447,8 @@ func _build_controls() -> void:
 				parent.add_child(_slider_row(spec))
 			"choice":
 				parent.add_child(_choice_row(spec))
+			"custom":
+				parent.add_child(spec.node)
 
 
 ## A section: a header that folds away the rows under it.
@@ -587,6 +589,7 @@ func open_sim(index: int) -> void:
 	sim = info.script.new()
 	sim.size = area.size
 	sim_layer.add_child(sim)
+	sim.controls_changed.connect(func() -> void: _build_controls.call_deferred())
 	_build_controls()
 	_say(sim.hint(), 6.0)
 

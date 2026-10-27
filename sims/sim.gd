@@ -5,6 +5,9 @@ extends Node2D
 ## whenever that area changes, and forwards touches that start inside it.
 ## Mouse input arrives as touch index 0 (emulate_touch_from_mouse is on).
 
+## Emit when controls() would now describe a different panel (Main rebuilds it).
+signal controls_changed
+
 var size := Vector2(720, 720)
 
 
@@ -25,6 +28,7 @@ func status() -> String:
 
 ## Describes the control panel. Each entry is a Dictionary:
 ##   {type = "section", label}   groups the rows after it under a folding header
+##   {type = "custom", node: Control}   any widget of the sim's own (a curve or gradient editor...)
 ##   {type = "slider", label, min, max, step, value, on: Callable(float), fmt = "%.1f", unit = ""}
 ##   {type = "toggle", label, value, on: Callable(bool)}
 ##   {type = "choice", label, options: Array[String], value: int, on: Callable(int)}
