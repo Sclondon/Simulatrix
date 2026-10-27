@@ -133,6 +133,8 @@ func set_sky(top: Color, horizon: Color, bottom := Color(-1, 0, 0)) -> void:
 func resize(new_size: Vector2) -> void:
 	size = new_size
 	viewport.size = Vector2i(size.max(Vector2.ONE))
+	# Upright phones: hold the width to a sensible field of view, so scenes don't feel cramped
+	camera.keep_aspect = Camera3D.KEEP_WIDTH if size.y > size.x else Camera3D.KEEP_HEIGHT
 	queue_redraw()
 
 

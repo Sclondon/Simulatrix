@@ -113,6 +113,8 @@ uniform sampler2D trail : filter_nearest, repeat_disable;
 uniform vec4 trail_rect = vec4(0.0);
 uniform float now = 0.0;
 uniform float recover = 8.0;
+uniform vec4 blasts[4];
+uniform float blast_speed = 9.0;
 
 uniform float lod_near = 10.0;
 uniform float fade_end = 44.0;
@@ -191,6 +193,19 @@ void vertex() {
 		float dist = length(away);
 		float close = (1.0 - smoothstep(p.w * 0.35, p.w, dist)) * (1.0 - smoothstep(1.2, 2.2, abs(p.y - root.y)));
 		bend += away / max(dist, 0.001) * close * push_bend;
+	}
+	// Blasts: a ring of wind running out from a point (x, z, time it went off, strength).
+	for (int i = 0; i < 4; i++) {
+		vec4 b = blasts[i];
+		float age = now - b.z;
+		if (b.w <= 0.0 || age < 0.0 || age > 3.0) {
+			continue;
+		}
+		vec2 away = root.xz - b.xy;
+		float dist = length(away);
+		float ring = exp(-pow((dist - age * blast_speed) / 1.8, 2.0));
+		float fade = b.w * (1.0 - smoothstep(0.0, 3.0, age)) / (1.0 + dist * 0.06);
+		bend += away / max(dist, 0.001) * ring * fade * 1.4;
 	}
 	// Trails: flattened where something walked, standing back up over `recover` seconds.
 	float laid = 0.0;
@@ -285,6 +300,8 @@ var _trail_dirty := false
 var _trail_wait := 0.0
 var _stamped := {}
 var _instances := 0
+var _blasts := PackedVector4Array([Vector4.ZERO, Vector4.ZERO, Vector4.ZERO, Vector4.ZERO])
+var _next_blast := 0
 
 
 ## Makes a field over `area` (world x, z) under `parent` and builds it. `settings` sets any
@@ -308,6 +325,17 @@ static func push(node: Node3D, radius := 0.7) -> void:
 
 static func unpush(node: Node3D) -> void:
 	node.remove_from_group(PUSHERS)
+
+
+## A gust that bursts out from `at` in a ring (an explosion, a downdraught, a spell), laying
+## the grass of every field over as it passes. Up to four at once; `strength` about 0.5..2.
+static func blast(at: Vector3, strength := 1.0) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree != null:
+		for made in tree.get_nodes_in_group(FIELDS):
+			var f := made as Grass
+			f._blasts[f._next_blast] = Vector4(at.x, at.z, f._now, strength)
+			f._next_blast = (f._next_blast + 1) % 4
 
 
 ## Sets the quality for every field from now on and rebuilds those already made.
@@ -483,6 +511,7 @@ func _process(delta: float) -> void:
 	for m in _materials:
 		m.set_shader_parameter(&"pushers", packed)
 		m.set_shader_parameter(&"pusher_count", n)
+		m.set_shader_parameter(&"blasts", _blasts)
 		m.set_shader_parameter(&"now", _now)
 	_trail_wait -= delta
 	if _trail_dirty and _trail_wait <= 0.0:

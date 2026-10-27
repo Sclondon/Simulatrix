@@ -23,6 +23,20 @@ var SIMS := [
 		color = Color("c38bff"), script = preload("res://sims/optics.gd")},
 	{title = "Charge Field", blurb = "Coulomb field, contours and field lines.", group = "Physics",
 		color = Color("ff6b6b"), script = preload("res://sims/field.gd")},
+	{title = "Pond", blurb = "Stones, splashes and wakes in clear water.", group = "VFX",
+		color = Color("4fc3d9"), script = preload("res://sims/vfx/pond.gd")},
+	{title = "Fire", blurb = "Candle to bonfire, any colour, lit at night.", group = "VFX",
+		color = Color("ff8a3d"), script = preload("res://sims/vfx/fire.gd")},
+	{title = "Grass", blurb = "Real 3D blades: part them, roll a ball through, blast them flat.", group = "VFX",
+		color = Color("8fd14f"), script = preload("res://sims/vfx/grass.gd")},
+	{title = "Wind", blurb = "One wind field moving grass, trees, leaves and a flag.", group = "VFX",
+		color = Color("b8e0ff"), script = preload("res://sims/vfx/wind.gd")},
+	{title = "Tree Lab", blurb = "Grow pines and broadleaf trees from code, then bend every setting.", group = "VFX",
+		color = Color("7ccf5a"), script = preload("res://sims/vfx/trees.gd")},
+	{title = "Painted Wood", blurb = "An autumn glade painted by hand: sun, season, falling leaves.", group = "VFX",
+		color = Color("e8913a"), script = preload("res://sims/vfx/woodland.gd")},
+	{title = "Sand", blurb = "Draw, paint and pour sand while the wind blows.", group = "VFX",
+		color = Color("e2b46b"), script = preload("res://sims/vfx/sand3d.gd")},
 ]
 const GROUPS := ["Physics", "VFX"]
 
@@ -469,7 +483,7 @@ func _slider_row(spec: Dictionary) -> Control:
 	name_label.text = spec.label
 	name_label.clip_text = true
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_label.size_flags_stretch_ratio = 0.8
+	name_label.size_flags_stretch_ratio = 0.95
 	row.add_child(name_label)
 	var holder := Control.new()
 	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -706,7 +720,7 @@ func _process(delta: float) -> void:
 			line = SIMS[current].blurb
 	status_left.text = line
 	var right := "%d fps" % Engine.get_frames_per_second()
-	if sim:
+	if sim and size.x > size.y:
 		right = "%d x %d   %s" % [int(area.size.x), int(area.size.y), right]
 	status_right.text = right
 
@@ -871,9 +885,8 @@ func _make_theme() -> Theme:
 	t.set_stylebox("slider", "HSlider", well)
 	t.set_stylebox("grabber_area", "HSlider", fill)
 	t.set_stylebox("grabber_area_highlight", "HSlider", fill)
-	var grab := Image.create(6, 34, false, Image.FORMAT_RGBA8)
-	grab.fill(C_EDGE)
-	grab.fill_rect(Rect2i(1, 1, 4, 32), Color("d8d8de"))
+	var grab := Image.create(2, 34, false, Image.FORMAT_RGBA8) # no handle: the fill edge is the value
+	grab.fill(Color(0, 0, 0, 0))
 	t.set_icon("grabber", "HSlider", ImageTexture.create_from_image(grab))
 	t.set_icon("grabber_highlight", "HSlider", ImageTexture.create_from_image(grab))
 
