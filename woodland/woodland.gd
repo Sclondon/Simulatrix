@@ -246,14 +246,23 @@ static func sky(sun_dir: Vector3) -> Sky:
 static func add_stream(parent: Node, points: Array[Vector3], half: float, sun_dir: Vector3, sun_color: Color) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# one side each point, mitred between the runs either side of it, so a bend has no gaps or overlaps
+	var sides: Array[Vector3] = []
+	for k in points.size():
+		var before := points[k] - points[maxi(k - 1, 0)]
+		var after := points[mini(k + 1, points.size() - 1)] - points[k]
+		var dir := (before.normalized() + after.normalized()).normalized()
+		var side := dir.cross(Vector3.UP).normalized()
+		var run_side := (after if after.length() > 0.0 else before).cross(Vector3.UP).normalized()
+		sides.append(side * half / maxf(side.dot(run_side), 0.5))
 	var run := 0.0
 	for k in points.size() - 1:
 		var a := points[k]
 		var b := points[k + 1]
-		var side := (b - a).cross(Vector3.UP).normalized() * half
 		var va := run
 		run += a.distance_to(b)
-		var quad := [[a - side, Vector2(0, va)], [a + side, Vector2(1, va)], [b - side, Vector2(0, run)], [b + side, Vector2(1, run)]]
+		var quad := [[a - sides[k], Vector2(0, va)], [a + sides[k], Vector2(1, va)], [b - sides[k + 1], Vector2(0, run)],
+			[b + sides[k + 1], Vector2(1, run)]]
 		for q in [quad[0], quad[2], quad[1], quad[1], quad[2], quad[3]]:
 			st.set_normal(Vector3.UP)
 			st.set_uv(q[1])

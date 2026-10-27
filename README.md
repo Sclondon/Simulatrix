@@ -27,16 +27,15 @@ water, fire, grass, pine-tree, leafy-tree, painted-woodland, sand, fireflies).
 | Sim | What it is |
 | --- | --- |
 | Ocean | Mariner's ocean made Gerstner: wind-built sea plus swell, folding whitecaps, Toon style, a buoy and dropped crates floating on a CPU copy of the waves. |
-| Weather Lab | Clouds (cumulus, stratus, storm with anvil, cirrus), GPU rain with splashes and puddles, settling snow, hail, branching lightning with flash and thunder countdown, time of day, fog. |
-| Pond | GameCommon `Water` in a basin: pebbles, splashes, a wake float, presets, night. |
+| Weather Lab | Clouds (cumulus, stratus, storm with anvil, cirrus), GPU rain with splashes and puddles, settling snow, hail, branching lightning with flash and thunder countdown, time of day, fog; the painted-woodland kit's sun shafts (crepuscular rays through cloud gaps) and its painted sky as a style. |
+| Pond | GameCommon `Water` in a basin: pebbles, splashes, a wake float, presets, night; or (Body: Stream) the painted-woodland kit's running water down a channel that falls downhill, carrying dropped leaves. |
 | Fire | GameCommon `Fire` from candle to bonfire, five colours, tap to light more. |
 | Grass | GameCommon `Grass`: finger pusher with trails, a rolling ball, `Grass.blast()`, palettes, quality. |
 | Wind | One wind field (`wind_field.gd`, timed to the grass shader's gusts) moving grass, swaying trees, leaves and seeds, streaks, a flag; vector view and blasts. |
-| Tree Lab | `PineTree` and `LeafyTree` with every setting as a slider, seed, sway shader, debug views, forest mode. |
-| Painted Wood | The painted-woodland kit: tree kinds, leaf species, season, sun, shafts, shake a tree. |
+| Tree Lab | `PineTree` and `LeafyTree` with every setting as a slider, seed, sway shader, debug views, forest mode; the painted-woodland kit's painted trees (oak, tall, leaner, aspen, snag: girth, lean, roots, swirl, real-leaf clumps, season) and its 3D bushes; a leaf-litter ground. |
 | Sand | The GameCommon sand kit: furrows, prints, ten kinds to paint, pour, wind, dunes. |
 | Texture Lab | GPU noise and material generators (Perlin, Simplex, Worley, FBM, warp, wood, marble, bricks...), ramps, seamless tiling, 3D previews, PNG export. |
-| Particle Editor | Unity/Godot-style editor over `GPUParticles3D`: layered emitters, modules, curve and gradient editors, 17 presets, JSON library, `.tscn` export. |
+| Particle Editor | Unity/Godot-style editor over `GPUParticles3D`: layered emitters, modules, curve and gradient editors, 20 presets (falling, gusting and swirling leaves among them), the kit's real leaf shapes as sprites, a Tumble mode, JSON library, `.tscn` export. |
 | Shader Lab | Live Godot shader editor: syntax highlighting, errors by line (via `OS.add_logger`), uniforms become properties, 2D and 3D modes, 16 presets, save and export. |
 
 ## Layout

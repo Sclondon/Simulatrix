@@ -2,6 +2,9 @@ extends Sim3D
 ## A pond: GameCommon's Water in a dug basin with a sandy shore, rocks and lily
 ## pads. Pebbles dropped in are watched by the water, which splashes them in;
 ## a float dragged about leaves rings; a tap can splash on its own.
+## Or a stream (Body): the painted-woodland kit's running water down a winding channel
+## that falls away downhill (a level box of water cannot run); taps drop leaves that
+## the current carries off.
 
 const LOOKS := [
 	# name, shallow, deep, sky, depth range, clarity (alpha_shallow), murk
@@ -26,6 +29,16 @@ var pads: Array[Node3D] = []
 var duck: Node3D
 var _time := 0.0
 var _stone_mat: StandardMaterial3D
+var body := 0 # 0 the pond, 1 a stream
+var stream_speed := 1.6
+var stream := Node3D.new()
+var stream_mat: ShaderMaterial
+var pond_things: Array[Node3D] = [] # hidden while it is a stream
+var floaters: Array[Dictionary] = [] # {node, z, side, spin}: leaves carried down the stream
+var _leaf_mat: StandardMaterial3D
+
+const STREAM_HALF := 1.35 # the stream's half width, metres
+const STREAM_FALL := 0.04 # how far it drops each metre it runs
 
 
 func build() -> void:
@@ -66,11 +79,13 @@ func build() -> void:
 		rock.scale = Vector3(r[1] * 2.2, r[1] * 1.4, r[1] * 1.8)
 		rock.rotation.y = rng.randf() * TAU
 		world.add_child(rock)
+		pond_things.append(rock)
 
 	water = Water.new()
 	water.size = Vector3(POND.x, 4.5, POND.y)
 	water.sides = false
 	world.add_child(water)
+	pond_things.append(water)
 	_apply_look()
 
 	# Lily pads riding the swell.
@@ -88,6 +103,7 @@ func build() -> void:
 		var a := rng.randf() * TAU
 		pad.position = Vector3(2.2 + cos(a) * rng.randf_range(0.3, 1.6), 0.0, -2.2 + sin(a) * rng.randf_range(0.3, 1.2))
 		world.add_child(pad)
+		pond_things.append(pad)
 		pads.append(pad)
 
 	# A float on a string, for the wake tool.
@@ -110,6 +126,10 @@ func build() -> void:
 	duck.position = Vector3(-1.0, 0.0, 0.5)
 	world.add_child(duck)
 	water.watch(duck, 0.3, 0.6)
+	pond_things.append(duck)
+	world.add_child(stream)
+	_leaf_mat = _matte(Color(0.86, 0.5, 0.16))
+	_leaf_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 
 ## A dug basin: an oval hollow inside the water box, its rim above the water so
@@ -130,8 +150,8 @@ func _build_basin() -> void:
 			var x := _spread(float(i) / GRID) * 90.0
 			var z := _spread(float(j) / GRID) * 90.0
 			var y := heights[j * (GRID + 1) + i]
-			var r := _oval(x, z)
-			var mud := Color(0.42, 0.37, 0.28).lerp(Color(0.24, 0.22, 0.17), clampf(-y / depth, 0.0, 1.0))
+			var r := _shore_r(x, z)
+			var mud := Color(0.42, 0.37, 0.28).lerp(Color(0.24, 0.22, 0.17), clampf(-(y - _fall(z)) / depth, 0.0, 1.0))
 			var grass := Color(0.27, 0.38, 0.18).lerp(Color(0.21, 0.31, 0.15), 0.5 + 0.5 * sin(x * 0.7 + sin(z * 0.5) * 2.0) * sin(z * 0.6))
 			grass = grass.lerp(Color(0.38, 0.44, 0.3), smoothstep(10.0, 50.0, Vector2(x, z).length()))
 			var c := mud.lerp(Color(0.66, 0.58, 0.43), smoothstep(0.82, 0.95, r))
@@ -169,10 +189,60 @@ func _oval(x: float, z: float) -> float:
 
 
 func _ground_y(x: float, z: float) -> float:
+	if body == 1:
+		# a channel cut down a slope: its bed in the middle, banks either side
+		var d := absf(x - _stream_x(z)) / STREAM_HALF
+		var bed := -minf(depth, 0.7) * (1.0 - smoothstep(0.2, 1.15, d))
+		var bank := 0.3 * smoothstep(1.0, 1.5, d) + 0.25 * smoothstep(2.0, 4.0, d)
+		return _fall(z) + bed + bank - 0.1 + 0.04 * sin(x * 1.3) * sin(z * 1.1)
 	var r := _oval(x, z)
 	var bowl := -depth * (1.0 - smoothstep(0.15, 1.0, r))
 	var bank := 0.35 * smoothstep(0.95, 1.25, r) + 0.25 * smoothstep(1.4, 2.4, r)
 	return bowl + bank - 0.1 + 0.04 * sin(x * 1.3) * sin(z * 1.1)
+
+
+## The ground falls away downhill (towards +z) when it is a stream; level for the pond.
+func _fall(z: float) -> float:
+	return -z * STREAM_FALL if body == 1 else 0.0
+
+
+## Where the stream's middle is, `z` metres along it.
+func _stream_x(z: float) -> float:
+	return 2.0 * sin(z * 0.12) + 0.8 * sin(z * 0.31 + 1.0)
+
+
+## 0 in the middle of the water, ~0.95 at the water's edge, more up the bank: the shore's colours go by it.
+func _shore_r(x: float, z: float) -> float:
+	if body == 1:
+		return absf(x - _stream_x(z)) / (STREAM_HALF * 1.05)
+	return _oval(x, z)
+
+
+func _set_body(i: int) -> void:
+	body = i
+	_build_basin()
+	for n in pond_things:
+		n.visible = body == 0
+	for p: Dictionary in pebbles:
+		p.node.queue_free()
+	pebbles.clear()
+	floaters.clear() # the leaves are the stream's children, freed with it just below
+	for child in stream.get_children():
+		child.free()
+	stream_mat = null
+	if body == 1:
+		# the kit's stream: a ribbon of running water down the channel, a little below its banks
+		var pts: Array[Vector3] = []
+		var z := -44.0
+		while z <= 44.0:
+			pts.append(Vector3(_stream_x(z), _fall(z) - 0.12, z))
+			z += 1.2
+		var c := sun.light_color
+		Woodland.add_stream(stream, pts, STREAM_HALF, -sun.global_basis.z, c)
+		stream_mat = (stream.get_child(0) as MeshInstance3D).material_override as ShaderMaterial
+		_apply_look()
+		focus = Vector3(_stream_x(0.0), -0.3, 0.0)
+		_place_camera()
 
 
 func _matte(c: Color) -> StandardMaterial3D:
@@ -191,6 +261,15 @@ func _apply_look() -> void:
 	water.depth_range = l[4]
 	water.alpha_shallow = l[5]
 	water.murk = l[6]
+	if stream_mat:
+		var sky: Color = l[3] if not night else Color(0.12, 0.16, 0.26)
+		stream_mat.set_shader_parameter("deep", (l[2] as Color).darkened(0.5))
+		stream_mat.set_shader_parameter("shallow", (l[1] as Color).lerp(Color(0.42, 0.37, 0.28), 0.5).darkened(0.2))
+		stream_mat.set_shader_parameter("sky", sky)
+		stream_mat.set_shader_parameter("sky_low", sky.darkened(0.7))
+		stream_mat.set_shader_parameter("sun_color", sun.light_color)
+		stream_mat.set_shader_parameter("sun_dir", -sun.global_basis.z)
+		stream_mat.set_shader_parameter("speed", stream_speed)
 
 
 func _set_night(on: bool) -> void:
@@ -217,6 +296,12 @@ func pokeable() -> bool:
 
 
 func poke_down(pos: Vector2) -> void:
+	if body == 1:
+		# a leaf dropped on the stream, carried off downhill
+		var hit: Variant = ground(pos, -0.12)
+		if hit != null:
+			_drop_leaf(hit.z, clampf((hit.x - _stream_x(hit.z)) / STREAM_HALF, -0.85, 0.85))
+		return
 	var at: Variant = ground(pos, water.surface_y())
 	if at == null:
 		return
@@ -226,7 +311,22 @@ func poke_down(pos: Vector2) -> void:
 		2: _move_duck(at)
 
 
+func _drop_leaf(z: float, side: float) -> void:
+	if floaters.size() >= 40:
+		floaters[0].node.queue_free()
+		floaters.remove_at(0)
+	var leaf := MeshInstance3D.new()
+	var q := PlaneMesh.new()
+	q.size = Vector2(0.16, 0.24)
+	leaf.mesh = q
+	leaf.material_override = _leaf_mat
+	stream.add_child(leaf)
+	floaters.append({node = leaf, z = z, side = side, spin = randf_range(-1.5, 1.5), turn = randf() * TAU})
+
+
 func poke_move(pos: Vector2) -> void:
+	if body == 1:
+		return
 	if tool == 2:
 		var at: Variant = ground(pos, water.surface_y())
 		if at != null:
@@ -281,6 +381,21 @@ func _process(delta: float) -> void:
 		pad.rotation.y += sin(_time * 0.3 + i) * delta * 0.05
 	if tool != 2 or _poking == -1:
 		duck.position.y = water.height_at(duck.position) - 0.08
+	# leaves riding the stream: fastest in the middle, bobbing and turning as they go
+	var k := 0
+	while k < floaters.size():
+		var f: Dictionary = floaters[k]
+		f.z += stream_speed / 1.4 * (1.0 - 0.5 * f.side * f.side) * delta
+		f.turn += f.spin * delta
+		if f.z > 44.0:
+			f.node.queue_free()
+			floaters.remove_at(k)
+			continue
+		var x: float = _stream_x(f.z) + f.side * STREAM_HALF
+		var bob := sin(_time * 2.3 + f.turn) * 0.015
+		f.node.position = Vector3(x, _fall(f.z) - 0.1 + bob, f.z)
+		f.node.rotation = Vector3(sin(_time + f.turn) * 0.15, f.turn, 0.0)
+		k += 1
 
 
 func controls() -> Array:
@@ -288,6 +403,12 @@ func controls() -> Array:
 	c.append_array([
 		{type = "choice", label = "Tool", options = TOOLS, value = tool, on = func(i: int) -> void: tool = i},
 		{type = "section", label = "Water"},
+		{type = "choice", label = "Body", options = ["Pond", "Stream"], value = body, on = _set_body},
+		{type = "slider", label = "Stream flow", min = 0.0, max = 4.0, step = 0.1, value = stream_speed, unit = "m/s",
+			fmt = "%.1f", on = func(v: float) -> void:
+				stream_speed = v
+				if stream_mat:
+					stream_mat.set_shader_parameter("speed", v)},
 		{type = "choice", label = "Preset", options = LOOKS.map(func(l: Array) -> String: return l[0]), value = look,
 			on = func(i: int) -> void:
 				look = i
@@ -342,7 +463,10 @@ func help() -> String:
 		+ "each pixel (read from the depth buffer), so the shallows go clear and foam rings whatever breaks the surface.\n\n"
 		+ "Finger on Poke: Pebble drops a stone the water watches (it splashes by how fast it falls), Splash throws a ring "
 		+ "of froth and drops, Wake drags a float that leaves rings. Two fingers zoom and pan; dip the camera under the "
-		+ "surface to see the murk and the light on the floor.")
+		+ "surface to see the murk and the light on the floor.\n\n"
+		+ "Body: Stream swaps the pond for the painted-woodland kit's running water, down a channel that falls away "
+		+ "downhill (a level box of water cannot run). Ripples run down it at Stream flow; tap it to drop leaves the "
+		+ "current carries off.")
 
 
 func hint() -> String:
@@ -350,5 +474,8 @@ func hint() -> String:
 
 
 func status() -> String:
+	if body == 1:
+		return "stream %.1f m/s  falls %d cm/m  leaves %d  %.1f ms" % [stream_speed, roundi(STREAM_FALL * 100.0),
+			floaters.size(), frame_ms()]
 	return "water %dx%d m  level %.2f  pebbles %d  %s  %.1f ms" % [POND.x, POND.y, water.position.y, pebbles.size(),
 		TOOLS[tool].to_lower(), frame_ms()]

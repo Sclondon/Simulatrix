@@ -1,19 +1,18 @@
-// Painted Wood's ground (after Scenic Route's): leaf litter in dabs over dark earth, mossy patches, a worn
-// path across the glade, dark pools under the trees and dappled sun coming through the canopy, drifting as
-// the wind moves the leaves. Lit by hand, as the woodland kit is.
+// Tree Lab's leaf-litter ground (after Scenic Route's, from the painted-woodland kit's glade): leaf litter in
+// dabs over dark earth, mossy patches, dark pools under the crowns and dappled sun coming through them,
+// drifting as the wind moves the leaves. Lit by hand, as the woodland kit is.
 shader_type spatial;
 render_mode unshaded;
 
 uniform vec3 sun_color : source_color = vec3(1.0, 0.84, 0.52);
-uniform vec3 dirt : source_color = vec3(0.5, 0.38, 0.25);
 uniform vec3 dirt_dark : source_color = vec3(0.26, 0.18, 0.11);
 uniform vec3 litter_a : source_color = vec3(0.62, 0.36, 0.14);
 uniform vec3 litter_b : source_color = vec3(0.42, 0.25, 0.11);
 uniform vec3 litter_c : source_color = vec3(0.72, 0.52, 0.2);
 uniform vec3 moss : source_color = vec3(0.32, 0.33, 0.13);
 uniform vec3 shadow : source_color = vec3(0.09, 0.06, 0.045);
-// x, z, crown radius, 0: up to 48 trees, for the pools under them
-uniform vec4 trees[48];
+// x, z, crown radius, 0: up to 8 trees, for the pools under them
+uniform vec4 trees[8];
 uniform int tree_count = 0;
 uniform float dapple = 1.0;
 
@@ -65,13 +64,10 @@ void fragment() {
 	litter *= 0.75 + 0.4 * d.y;
 	litter = mix(litter, dirt_dark, smoothstep(0.5, 0.85, fbm(p * 0.35)) * 0.7);
 	litter = mix(litter, moss * (0.8 + 0.3 * vnoise(p * 2.0)), smoothstep(0.62, 0.8, fbm(p * 0.21 + 11.0)) * 0.8);
-	// a path worn across the glade
-	float px = 1.6 * sin(p.y * 0.09) + 0.8 * sin(p.y * 0.21 + 1.0);
-	float on_path = 1.0 - smoothstep(0.9, 1.5, abs(p.x - px) + (fbm(p * 0.6) - 0.5) * 0.8);
-	vec3 c = mix(litter, dirt * (0.85 + 0.25 * vnoise(p * 4.0)), on_path * 0.85);
+	vec3 c = litter;
 	// pools of shade under the crowns, lit through in drifting patches
 	float shade = 0.0;
-	for (int i = 0; i < 48; i++) {
+	for (int i = 0; i < 8; i++) {
 		if (i >= tree_count) {
 			break;
 		}

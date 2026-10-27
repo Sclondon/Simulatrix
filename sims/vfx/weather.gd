@@ -6,7 +6,9 @@ extends Sim3D
 ##
 ## Clouds are heaps of soft puffs (weather_cloud.gdshader, one MultiMesh, sorted back to front),
 ## over a cloud layer in the sky shader (weather_sky.gdshader). Ideas from Hemlock's Tower's
-## weather (puff clouds, lightning) and Mariner's; the time of day is weather_daylight.gd.
+## weather (puff clouds, lightning) and Mariner's; the time of day is weather_daylight.gd. The
+## painted-woodland kit gives the sun shafts (crepuscular rays through the gaps in the cloud) and the
+## Painted sky style.
 
 const Daylight := preload("res://sims/vfx/weather_daylight.gd")
 const CLOUD := preload("res://sims/vfx/weather_cloud.gdshader")
@@ -40,12 +42,19 @@ var wind := 5.0
 var wind_from := 250.0
 var fog := 0.08
 var quality := 1
+var sky_style := 0 # 0 the lab's sky (moon, stars, its cloud layer), 1 the painted woodland's
+var shafts_on := true
+var shaft_strength := 0.6
 
 var wet := 0.0
 var snow_depth := 0.0
 var bolts := 0
 
 var _sky_mat: ShaderMaterial
+var _painted_sky := ShaderMaterial.new()
+var _shafts := Node3D.new()
+var _shaft_mats: Array[ShaderMaterial] = []
+var _shaft_sun := Vector3.ZERO
 var _cloud_mat: ShaderMaterial
 var _cloud_mm: MultiMesh
 var _ground_mats: Array[ShaderMaterial] = []
@@ -89,6 +98,9 @@ func help() -> String:
 		+ "Rain wets the ground (it darkens, puddles form in the low spots and ring with drops), snow settles "
 		+ "on everything that faces up, hail bounces. Lightning branches down from the cloud base; count the "
 		+ "seconds to the thunder (sound travels 343 m/s) to know how far it struck.\n\n"
+		+ "Sun shafts (crepuscular rays) slant down from the sun where it breaks through: strongest with broken "
+		+ "cloud and a low sun, gone under a full deck or at night. The Painted sky is the painted woodland's: gold "
+		+ "low by the sun, cooling overhead, with long streaks (no moon, stars or flash in it).\n\n"
 		+ "Drag to orbit, pinch or wheel to zoom. In Poke mode, tap the ground to strike it.")
 
 
@@ -107,6 +119,15 @@ func controls() -> Array:
 		{type = "slider", label = "Hour", min = 0.0, max = 24.0, step = 0.25, value = hour, fmt = "%05.2f", unit = "h",
 			on = func(v: float) -> void: hour = v},
 		{type = "toggle", label = "Day cycle", value = cycle, on = func(v: bool) -> void: cycle = v},
+		{type = "section", label = "Light"},
+		{type = "choice", label = "Sky", options = ["Lab", "Painted"], value = sky_style, on = func(i: int) -> void:
+			sky_style = i
+			environment.sky.sky_material = _painted_sky if i == 1 else _sky_mat},
+		{type = "toggle", label = "Sun shafts", value = shafts_on, on = func(v: bool) -> void:
+			shafts_on = v
+			_shafts.visible = v},
+		{type = "slider", label = "Shafts", min = 0.0, max = 1.5, step = 0.05, value = shaft_strength, fmt = "%.2f",
+			on = func(v: float) -> void: shaft_strength = v},
 		{type = "section", label = "Clouds"},
 		{type = "choice", label = "Type", options = TYPES, value = cloud_type,
 			on = func(i: int) -> void: cloud_type = i; _make_clouds()},
@@ -183,6 +204,8 @@ func build() -> void:
 	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = sky
+	_painted_sky.shader = Woodland.SKY
+	world.add_child(_shafts)
 	environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	environment.fog_enabled = true
 	environment.fog_sky_affect = 0.15
@@ -638,6 +661,13 @@ func _process(delta: float) -> void:
 			_sky_mat.set_shader_parameter("cloud_cover", cover * 0.85)
 			_sky_mat.set_shader_parameter("cloud_scale", 2.6)
 			_sky_mat.set_shader_parameter("cloud_stretch", Vector2(1, 5))
+	if sky_style == 1:
+		_painted_sky.set_shader_parameter("sun_dir", day.sun_dir)
+		_painted_sky.set_shader_parameter("zenith", zen)
+		_painted_sky.set_shader_parameter("horizon", hor)
+		var lc: Color = day.light_color
+		_painted_sky.set_shader_parameter("glow", hor.lerp(lc, (1.0 - day.night) * (1.0 - _dim * 0.7)))
+	_update_shafts(day)
 	var fog_d := 0.00006 + fog * fog * 0.006
 	if precip > 0:
 		fog_d += intensity * (0.0012 if precip != 2 else 0.003)
@@ -746,3 +776,43 @@ func poke_down(pos: Vector2) -> void:
 			strike(p)
 			return
 		step *= 1.03
+
+
+# --- sun shafts (the painted-woodland kit's) ------------------------------------
+
+## Crepuscular rays: the kit's shaft cards slanting down from the sun over the valley, re-aimed as the
+## sun moves. They show where the sun breaks through: most with broken cloud and a low sun, none under a
+## full deck, in rain or at night.
+func _update_shafts(day: Dictionary) -> void:
+	if not shafts_on:
+		return
+	var sun_dir: Vector3 = day.sun_dir
+	if sun_dir.y < 0.03:
+		_shafts.visible = false
+		return
+	_shafts.visible = true
+	if _shaft_sun == Vector3.ZERO or sun_dir.angle_to(_shaft_sun) > 0.03:
+		_shaft_sun = sun_dir
+		for child in _shafts.get_children():
+			child.free()
+		_shaft_mats.clear()
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 21
+		for i in 9:
+			var a := rng.randf() * TAU
+			var p := Vector3(cos(a), 0, sin(a)) * rng.randf_range(15.0, 120.0)
+			p.y = terrain(p.x, p.z)
+			Woodland.add_sun_shaft(_shafts, p, sun_dir, Color.WHITE, 260.0, rng.randf_range(14.0, 28.0), i * 2.3, 0.2)
+		for g in _shafts.get_children():
+			var m := (g as MeshInstance3D).material_override as ShaderMaterial
+			if m and not _shaft_mats.has(m):
+				_shaft_mats.append(m)
+	# breaks in the cloud: none in clear sky (nothing to cast them) or under a full deck
+	var gap: float = clampf(0.25 + 3.0 * cover * (1.0 - cover), 0.0, 1.0) * [1.0, 0.35, 0.6, 0.5][cloud_type]
+	var low := 1.0 + smoothstep(0.5, 0.08, sun_dir.y)
+	var rain := 1.0 - (intensity * 0.8 if precip > 0 else 0.0)
+	var s: float = shaft_strength * gap * low * rain * (1.0 - day.night) * (1.0 - _dim * 0.6) * 0.45
+	var lc: Color = day.light_color
+	for m in _shaft_mats:
+		m.set_shader_parameter("strength", s)
+		m.set_shader_parameter("color", lc.lerp(Color(1.0, 0.85, 0.5), 0.3))

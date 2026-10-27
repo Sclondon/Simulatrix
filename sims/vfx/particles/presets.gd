@@ -14,7 +14,7 @@ const DEFAULT := {
 	size = 0.3, size_rand = 0.3, size_curve = [[0, 1], [1, 1]],
 	grad = [[0, "ffffffff"], [1, "ffffff00"]], hue_rand = 0.0, intensity = 1.0,
 	angle_rand = 360.0, spin = 0.0, spin_rand = 0.0,
-	tex = "soft", mode = "billboard", stretch = 4.0, blend = "add", soft = false, lit = false,
+	tex = "soft", mode = "billboard", stretch = 4.0, tumble = 2.5, blend = "add", soft = false, lit = false,
 	light = 0.0, light_range = 4.0, flicker = 0.0,
 	sub = -1, sub_count = 20,
 }
@@ -26,7 +26,7 @@ const SPARK := [[0, "ffffe0ff"], [0.3, "ffc040ff"], [1, "ff400000"]]
 
 const NAMES := ["Campfire", "Smoke", "Sparks", "Explosion", "Magic burst", "Portal", "Rain", "Snow", "Fireflies",
 	"Ghost wisps", "Blood splat", "Confetti", "Lightning sparks", "Waterfall spray", "Dust puff", "Spooky candle",
-	"Fireworks"]
+	"Fireworks", "Falling leaves", "Leaf gust", "Swirling leaves"]
 
 
 ## An emitter: the defaults with some settings changed.
@@ -244,4 +244,50 @@ static func effect(name: String) -> Dictionary:
 			list.append(em({name = "Burst", amount = 70, explosive = 1.0, lifetime = 1.6, life_rand = 0.3, spread = 180.0,
 				speed = 5.0, speed_rand = 0.2, damping = 1.5, gravity = -2.0, size = 0.08, mode = "stretch", stretch = 3.0,
 				tex = "spark", hue_rand = 0.5, grad = [[0, "ffffffff"], [0.2, "ff60c0ff"], [1, "ff206000"]], intensity = 3.0}))
+		"Falling leaves":
+			# the painted wood's leaves: beech gold, maple orange, oak rust, coming down slowly, swinging and tumbling
+			fx.view = [8.0, 2.0]
+			for k in LEAVES.size():
+				var l: Array = LEAVES[k]
+				list.append(em({name = l[0], amount = 26, lifetime = 7.0, life_rand = 0.3, shape = "box", shape_size = 3.0,
+					shape_y = 0.05, offset_y = 4.5, tilt = 180.0, spread = 20.0, speed = 0.6, gravity = -2.4, damping = 1.6,
+					wind = 0.35, turb = 0.22, turb_scale = 1.6, turb_speed = 0.4, size = 0.26, size_rand = 0.3,
+					tex = l[1], mode = "tumble", tumble = 1.6 + k * 0.4, blend = "mix", hue_rand = 0.04,
+					angle_rand = 360.0, spin = 40.0, spin_rand = 90.0, grad = _leaf_grad(l[2])}))
+		"Leaf gust":
+			# a pile blown off sideways by a gust, then drifting down
+			fx.view = [9.0, 1.4]
+			fx.cycle = 4.5
+			for k in LEAVES.size():
+				var l: Array = LEAVES[k]
+				list.append(em({name = l[0], burst = true, amount = 30, explosive = 0.85, lifetime = 4.0, life_rand = 0.3,
+					shape = "disc", shape_size = 0.8, offset_y = 0.1, tilt = 70.0, heading = 0.0, spread = 25.0, speed = 5.0,
+					speed_rand = 0.5, gravity = -1.8, damping = 1.6, wind = 1.6, turb = 0.3, turb_scale = 1.2,
+					size = 0.26, size_rand = 0.3, tex = l[1], mode = "tumble", tumble = 3.0 + k * 0.6, blend = "mix",
+					hue_rand = 0.04, spin = 120.0, spin_rand = 200.0, grad = _leaf_grad(l[2])}))
+			list.append(em({name = "Dust", burst = true, amount = 14, explosive = 0.9, lifetime = 1.4, shape = "disc",
+				shape_size = 0.8, offset_y = 0.1, tilt = 70.0, spread = 30.0, speed = 2.5, damping = 2.5, wind = 1.6,
+				size = 1.0, size_curve = [[0, 0.3], [1, 1]], grad = [[0, "b09a7a00"], [0.1, "b09a7a80"], [1, "c0aa8a00"]],
+				tex = "smoke", blend = "mix", soft = true, spin = 30.0}))
+		"Swirling leaves":
+			# a dust devil of leaves: carried round and up a column, thrown out at the top
+			fx.view = [8.0, 1.8]
+			for k in LEAVES.size():
+				var l: Array = LEAVES[k]
+				list.append(em({name = l[0], amount = 40, lifetime = 3.6, life_rand = 0.3, shape = "ring", shape_size = 1.4,
+					ring_inner = 0.2, shape_y = 0.0, offset_y = 0.1, spread = 15.0, speed = 0.6, orbit = 0.45,
+					radial = -0.2, gravity = 1.2, swirl = 2.0, turb = 0.2, turb_scale = 1.5, size = 0.26, size_rand = 0.3,
+					tex = l[1], mode = "tumble", tumble = 3.5 + k * 0.5, blend = "mix", hue_rand = 0.05,
+					spin = 200.0, spin_rand = 160.0, grad = _leaf_grad(l[2])}))
 	return fx
+
+
+## The painted wood's leaf colours (woodland/shaders/leaf.gdshader's gold, orange, rust and brown):
+## [emitter name, sprite, colour].
+const LEAVES := [["Beech", "leaf_beech", "e8a83a"], ["Maple", "leaf_maple", "d4621e"], ["Oak", "leaf_oak", "8a3e1a"],
+	["Birch", "leaf_birch", "e8c048"]]
+
+
+## A leaf's colour held through its life, fading in and out at the ends.
+static func _leaf_grad(hex: String) -> Array:
+	return [[0, hex + "00"], [0.06, hex + "ff"], [0.9, hex + "ff"], [1, hex + "00"]]

@@ -2,19 +2,32 @@ extends RefCounted
 ## The particle sprites, drawn in code: white shapes in the alpha channel, so the
 ## particle colour tints them. 64 px, mipmapped. get_texture(name) caches each one.
 
-const NAMES := ["soft", "hard", "spark", "smoke", "flame", "star", "ring", "drop", "flake", "leaf", "square"]
-const LABELS := ["Soft", "Dot", "Spark", "Smoke", "Flame", "Star", "Ring", "Drop", "Flake", "Leaf", "Square"]
+const NAMES := ["soft", "hard", "spark", "smoke", "flame", "star", "ring", "drop", "flake", "leaf", "square",
+	"leaf_oak", "leaf_maple", "leaf_beech", "leaf_aspen", "leaf_birch"]
+const LABELS := ["Soft", "Dot", "Spark", "Smoke", "Flame", "Star", "Ring", "Drop", "Flake", "Leaf", "Square",
+	"Oak", "Maple", "Beech", "Aspen", "Birch"]
 const SIZE := 64
+## The real leaves are cut from the painted-woodland kit's leaf sheet (its cell order).
+const LeafAtlas := preload("res://woodland/leaf_atlas.gd")
 
 static var _cache := {}
 
 
 static func get_texture(name: String) -> Texture2D:
 	if not _cache.has(name):
-		var img := _draw(name)
+		var img := _leaf(name.trim_prefix("leaf_")) if name.begins_with("leaf_") else _draw(name)
 		img.generate_mipmaps()
 		_cache[name] = ImageTexture.create_from_image(img)
 	return _cache[name]
+
+
+## One real leaf from the kit's sheet: white with grey veins, so the particle colour tints it and
+## the veins come out darker.
+static func _leaf(shape: String) -> Image:
+	var sheet := LeafAtlas.texture().get_image()
+	sheet.clear_mipmaps()
+	var cell: int = LeafAtlas.CELL
+	return sheet.get_region(Rect2i(maxi(LeafAtlas.SHAPES.find(shape), 0) * cell, 0, cell, cell))
 
 
 static func _draw(name: String) -> Image:

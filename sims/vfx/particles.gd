@@ -16,8 +16,8 @@ const GRID := preload("res://sims/vfx/particles/grid.gdshader")
 
 const SHAPES := ["point", "sphere", "shell", "hemi", "box", "ring", "disc", "line"]
 const SHAPE_LABELS := ["Point", "Sphere", "Shell", "Hemi", "Box", "Ring", "Disc", "Line"]
-const MODES := ["billboard", "stretch", "flat"]
-const MODE_LABELS := ["Billboard", "Stretch", "Flat"]
+const MODES := ["billboard", "stretch", "flat", "tumble"]
+const MODE_LABELS := ["Billboard", "Stretch", "Flat", "Tumble"]
 const BACKDROPS := ["Dark", "Grey", "Night", "Day"]
 const MAX_EMITTERS := 8
 const MAX_AMOUNT := 600
@@ -144,7 +144,7 @@ func _make_run(i: int, targets: Dictionary) -> Dictionary:
 		node = GPUParticles3D.new(), pm = ParticleProcessMaterial.new(), dm = StandardMaterial3D.new(),
 		quad = QuadMesh.new(), curve = Curve.new(), curve_tex = CurveTexture.new(), gradient = Gradient.new(),
 		grad_tex = GradientTexture1D.new(), light = null, attractor = null, tracked = false, target_of = -1,
-		mm = null, parts = [], spawn_acc = 0.0, pool = [], pool_i = 0, points = null,
+		tm = null, mm = null, parts = [], spawn_acc = 0.0, pool = [], pool_i = 0, points = null,
 	}
 	r.target_of = targets.get(i, -1)
 	var src := int(fx.emitters[i].sub)
@@ -311,6 +311,17 @@ func apply(i: int) -> void:
 			dm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 			dm.billboard_keep_scale = true
 	_style(dm, e)
+	# tumbling: billboards that flip over and back as they fall (leaves), drawn by their own shader
+	if e.mode == "tumble":
+		if not r.tm:
+			r.tm = ShaderMaterial.new()
+		r.tm.shader = _tumble_shader(e.blend == "add")
+		r.tm.set_shader_parameter("tex", Tex.get_texture(e.tex))
+		r.tm.set_shader_parameter("intensity", e.intensity)
+		r.tm.set_shader_parameter("tumble", e.tumble)
+		q.material = r.tm
+	else:
+		q.material = dm
 
 	# a light that follows the emitter
 	if e.light > 0.0 and e.on:
@@ -365,6 +376,49 @@ func apply(i: int) -> void:
 			p.transform_align = n.transform_align
 			p.draw_order = n.draw_order
 			p.visible = e.on and src.on
+
+
+static var _tumble_shaders := {}
+
+
+## The Tumble mode's shader, made from code (not a file) so an exported scene carries it inside.
+## A camera-facing card turned by the particle's angle, squeezed across by cos(phase) so it
+## flips over and back like a falling leaf, its back a little darker. Unlit; additive or alpha.
+static func _tumble_shader(add: bool) -> Shader:
+	if not _tumble_shaders.has(add):
+		var s := Shader.new()
+		s.code = """shader_type spatial;
+render_mode unshaded, cull_disabled, depth_draw_never, %s;
+uniform sampler2D tex : source_color, filter_linear_mipmap;
+uniform float intensity = 1.0;
+uniform float tumble = 2.5; // flips a second
+varying vec4 tint;
+
+void vertex() {
+	float id = float(INSTANCE_ID);
+	float phase = TIME * tumble * (0.6 + fract(id * 0.618) * 0.8) + id * 2.1;
+	float flip = cos(phase);
+	vec3 v = VERTEX;
+	v.x *= flip;
+	v.y *= 0.8 + 0.2 * cos(phase * 0.7 + 1.0);
+	float a = INSTANCE_CUSTOM.x;
+	v.xy = mat2(vec2(cos(a), sin(a)), vec2(-sin(a), cos(a))) * v.xy;
+	float size = length(MODEL_MATRIX[0].xyz);
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(normalize(INV_VIEW_MATRIX[0]), normalize(INV_VIEW_MATRIX[1]),
+		normalize(INV_VIEW_MATRIX[2]), MODEL_MATRIX[3]);
+	VERTEX = v * size;
+	tint = COLOR;
+	tint.rgb *= 0.62 + 0.38 * abs(flip) * (flip > 0.0 ? 1.0 : 0.8);
+}
+
+void fragment() {
+	vec4 t = texture(tex, UV);
+	ALBEDO = tint.rgb * t.rgb * intensity;
+	ALPHA = tint.a * t.a;
+}
+""" % ("blend_add" if add else "blend_mix")
+		_tumble_shaders[add] = s
+	return _tumble_shaders[add]
 
 
 func _style(dm: StandardMaterial3D, e: Dictionary) -> void:
@@ -775,6 +829,7 @@ func controls() -> Array:
 		{type = "choice", label = "Mode", options = MODE_LABELS, value = maxi(MODES.find(e.mode), 0),
 			on = func(k: int) -> void: _put("mode", MODES[k])},
 		_slider("Stretch", "stretch", 1.0, 20.0, 0.1, "%.1f", "x"),
+		_slider("Tumble", "tumble", 0.0, 8.0, 0.1, "%.1f", "/s"),
 		{type = "choice", label = "Blend", options = ["Additive", "Alpha"], value = 0 if e.blend == "add" else 1,
 			on = func(k: int) -> void: _put("blend", "add" if k == 0 else "mix")},
 		{type = "toggle", label = "Soft", value = e.soft, on = _set_bool.bind("soft", false)},
