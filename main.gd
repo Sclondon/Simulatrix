@@ -4,53 +4,52 @@ extends Control
 ## panel docked right in landscape and along the bottom in portrait, and a status bar.
 ## The UI is built in code; each sim describes its own controls (see sims/sim.gd).
 
+## One list, with like sims side by side: bodies and cloth; gravity; fields and light;
+## waves and water; air and plants; sand; fire and effects; then the tools.
 var SIMS := [
-	{title = "Playground", blurb = "Rigid bodies: drop, pour and fling shapes.", group = "Physics",
+	{title = "Playground", blurb = "Rigid bodies: drop, pour and fling shapes.",
 		color = Color("ff5fa2"), script = preload("res://sims/playground.gd")},
-	{title = "Chaos Pendulum", blurb = "Double pendulum, RK4, three ghosts 0.001 rad apart.", group = "Physics",
+	{title = "Chaos Pendulum", blurb = "Double pendulum, RK4, three ghosts 0.001 rad apart.",
 		color = Color("7aa2ff"), script = preload("res://sims/pendulum.gd")},
-	{title = "Cloth", blurb = "Verlet cloth that billows, cuts and tears.", group = "Physics",
+	{title = "Cloth", blurb = "Verlet cloth that billows, cuts and tears.",
 		color = Color("3de0c4"), script = preload("res://sims/cloth.gd")},
-	{title = "Gravity Well", blurb = "Inverse-square orbits, merging collisions.", group = "Physics",
+	{title = "Gravity Well", blurb = "Inverse-square orbits, merging collisions.",
 		color = Color("ffd166"), script = preload("res://sims/orbits.gd")},
-	{title = "Ripple Tank", blurb = "Wave interference and the double slit.", group = "Physics",
-		color = Color("5ec8ff"), script = preload("res://sims/waves.gd")},
-	{title = "Fluid", blurb = "Particle fluid drawn as metaballs.", group = "Physics",
-		color = Color("4aa8ff"), script = preload("res://sims/fluid.gd")},
-	{title = "Falling Sand", blurb = "Cellular automaton: sand, water, fire, lava.", group = "Physics",
-		color = Color("e8b86a"), script = preload("res://sims/sand.gd")},
-	{title = "Light Bench", blurb = "2D ray tracing through prisms, lenses, mirrors.", group = "Physics",
-		color = Color("c38bff"), script = preload("res://sims/optics.gd")},
-	{title = "Charge Field", blurb = "Coulomb field, contours and field lines.", group = "Physics",
-		color = Color("ff6b6b"), script = preload("res://sims/field.gd")},
-	{title = "Orbits 3D", blurb = "Launch satellites round Atlas's Earth and Moon by hand.", group = "Physics",
+	{title = "Orbits 3D", blurb = "Launch satellites round Atlas's Earth and Moon by hand.",
 		color = Color("5fd7ff"), script = preload("res://sims/orbits3d.gd")},
-	{title = "Ocean", blurb = "Wind-driven Gerstner sea with whitecaps and things that float.", group = "VFX",
-		color = Color("3a8fd8"), script = preload("res://sims/vfx/ocean.gd")},
-	{title = "Weather Lab", blurb = "Shape clouds, make rain, snow, hail and lightning.", group = "VFX",
-		color = Color("9fb4d8"), script = preload("res://sims/vfx/weather.gd")},
-	{title = "Pond", blurb = "Stones, splashes and wakes in clear water.", group = "VFX",
+	{title = "Charge Field", blurb = "Coulomb field, contours and field lines.",
+		color = Color("ff6b6b"), script = preload("res://sims/field.gd")},
+	{title = "Light Bench", blurb = "2D ray tracing through prisms, lenses, mirrors.",
+		color = Color("c38bff"), script = preload("res://sims/optics.gd")},
+	{title = "Ripple Tank", blurb = "Wave interference and the double slit.",
+		color = Color("5ec8ff"), script = preload("res://sims/waves.gd")},
+	{title = "Fluid", blurb = "Particle fluid drawn as metaballs.",
+		color = Color("4aa8ff"), script = preload("res://sims/fluid.gd")},
+	{title = "Pond", blurb = "Stones, splashes and wakes in clear water.",
 		color = Color("4fc3d9"), script = preload("res://sims/vfx/pond.gd")},
-	{title = "Fire", blurb = "Candle to bonfire, any colour, lit at night.", group = "VFX",
-		color = Color("ff8a3d"), script = preload("res://sims/vfx/fire.gd")},
-	{title = "Grass", blurb = "Real 3D blades: part them, roll a ball through, blast them flat.", group = "VFX",
-		color = Color("8fd14f"), script = preload("res://sims/vfx/grass.gd")},
-	{title = "Wind", blurb = "One wind field moving grass, trees, leaves and a flag.", group = "VFX",
+	{title = "Ocean", blurb = "Wind-driven Gerstner sea with whitecaps and things that float.",
+		color = Color("3a8fd8"), script = preload("res://sims/vfx/ocean.gd")},
+	{title = "Weather Lab", blurb = "Shape clouds, make rain, snow, hail and lightning.",
+		color = Color("9fb4d8"), script = preload("res://sims/vfx/weather.gd")},
+	{title = "Wind", blurb = "One wind field moving grass, trees, leaves and a flag.",
 		color = Color("b8e0ff"), script = preload("res://sims/vfx/wind.gd")},
-	{title = "Tree Lab", blurb = "Grow pines and broadleaf trees from code, then bend every setting.", group = "VFX",
+	{title = "Grass", blurb = "Real 3D blades: part them, roll a ball through, blast them flat.",
+		color = Color("8fd14f"), script = preload("res://sims/vfx/grass.gd")},
+	{title = "Tree Lab", blurb = "Grow pines, broadleaf and painted trees from code, then bend every setting.",
 		color = Color("7ccf5a"), script = preload("res://sims/vfx/trees.gd")},
-	{title = "Painted Wood", blurb = "An autumn glade painted by hand: sun, season, falling leaves.", group = "VFX",
-		color = Color("e8913a"), script = preload("res://sims/vfx/woodland.gd")},
-	{title = "Sand", blurb = "Draw, paint and pour sand while the wind blows.", group = "VFX",
+	{title = "Falling Sand", blurb = "Cellular automaton: sand, water, fire, lava.",
+		color = Color("e8b86a"), script = preload("res://sims/sand.gd")},
+	{title = "Sand", blurb = "Draw, paint and pour sand while the wind blows.",
 		color = Color("e2b46b"), script = preload("res://sims/vfx/sand3d.gd")},
-	{title = "Texture Lab", blurb = "Procedural noise and material textures on the GPU: tile, preview in 3D, save PNG.",
-		group = "VFX", color = Color("9f8cff"), script = preload("res://sims/vfx/texture_lab.gd")},
+	{title = "Fire", blurb = "Candle to bonfire, any colour, lit at night.",
+		color = Color("ff8a3d"), script = preload("res://sims/vfx/fire.gd")},
 	{title = "Particle Editor", blurb = "Layer emitters into effects, Unity / Godot style, and export them as Godot scenes.",
-		group = "VFX", color = Color("ff9f43"), script = preload("res://sims/vfx/particles.gd")},
+		color = Color("ff9f43"), script = preload("res://sims/vfx/particles.gd")},
+	{title = "Texture Lab", blurb = "Procedural noise and material textures on the GPU: tile, preview in 3D, save PNG.",
+		color = Color("9f8cff"), script = preload("res://sims/vfx/texture_lab.gd")},
 	{title = "Shader Lab", blurb = "Write Godot shaders live: presets, errors by line, uniforms as properties.",
-		group = "VFX", color = Color("f07ad6"), script = preload("res://sims/vfx/shader_lab.gd")},
+		color = Color("f07ad6"), script = preload("res://sims/vfx/shader_lab.gd")},
 ]
-const GROUPS := ["Physics", "VFX"]
 
 const MENU_H := 44.0
 const TAB_H := 38.0
@@ -71,6 +70,23 @@ const C_ACCENT_HI := Color("6fa3de")
 const TEXT := Color("e2e2e6")
 const DIM_TEXT := Color("9a9aa3")
 
+## Phones (a short side under 600 CSS px): the whole UI is scaled up, touch rows grow by `k`,
+## the menu bar is pared down, and Properties becomes a bottom sheet (or a side panel lying down).
+var compact := false
+var k := 1.0
+var sheet_tall := false
+
+## Drag-to-scroll for the panels, so a drag that starts on a button or a value bar still scrolls.
+var scrollers: Array[ScrollContainer] = []
+var drag_scroll: ScrollContainer = null
+var drag_index := -1
+var drag_from := Vector2.ZERO
+var drag_scroll_from := 0.0
+var drag_scrolling := false
+var drag_velocity := 0.0
+var fling: ScrollContainer = null
+var fling_velocity := 0.0
+
 var current := -1
 var sim: Sim
 var area := Rect2()
@@ -87,6 +103,9 @@ var sim_layer := Node2D.new()
 var menu_bar := PanelContainer.new()
 var sims_menu := MenuButton.new()
 var view_menu := MenuButton.new()
+var menu_title := Label.new()
+var props_btn := Button.new()
+var panel_scroll := ScrollContainer.new()
 var tab_bar := PanelContainer.new()
 var tab_title := Label.new()
 var tab_swatch := ColorRect.new()
@@ -108,6 +127,9 @@ var help_label := Label.new()
 
 
 func _ready() -> void:
+	compact = _short_side_css() < 600.0 or "--compact" in OS.get_cmdline_user_args()
+	k = 1.3 if compact else 1.0
+	_fit_scale()
 	theme = _make_theme()
 	add_child(sim_layer)
 	_build_menu_bar()
@@ -121,6 +143,20 @@ func _ready() -> void:
 	show_menu()
 
 
+## The shorter side of the window in CSS pixels (device pixels on the web are divided by the
+## device pixel ratio).
+func _short_side_css() -> float:
+	var win := Vector2(DisplayServer.window_get_size())
+	return minf(win.x, win.y) / maxf(DisplayServer.screen_get_scale(), 1.0)
+
+
+## Scales everything up on small screens so that text and touch targets come out a usable size.
+func _fit_scale() -> void:
+	var f := clampf(560.0 / maxf(_short_side_css(), 1.0), 1.0, 1.6) if compact else 1.0
+	if not is_equal_approx(get_window().content_scale_factor, f):
+		get_window().content_scale_factor = f
+
+
 # --- building the UI ---------------------------------------------------------
 
 func _build_menu_bar() -> void:
@@ -129,6 +165,9 @@ func _build_menu_bar() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 2)
 	menu_bar.add_child(row)
+	if compact:
+		_build_compact_bar(row)
+		return
 	var logo := Label.new()
 	logo.text = " SIMULATRIX "
 	logo.add_theme_color_override("font_color", C_ACCENT_HI)
@@ -138,11 +177,8 @@ func _build_menu_bar() -> void:
 	sims_menu.text = "Sims"
 	_style_menu(sims_menu)
 	var popup := sims_menu.get_popup()
-	for g in GROUPS:
-		popup.add_separator(g)
-		for i in SIMS.size():
-			if SIMS[i].get("group", "Physics") == g:
-				popup.add_item(SIMS[i].title, i)
+	for i in SIMS.size():
+		popup.add_item(SIMS[i].title, i)
 	popup.id_pressed.connect(open_sim)
 	row.add_child(sims_menu)
 
@@ -187,6 +223,31 @@ func _build_menu_bar() -> void:
 	row.add_child(_tool_button("<", func() -> void: open_sim(current - 1 if current != -1 else SIMS.size() - 1)))
 	row.add_child(_tool_button(">", func() -> void: open_sim(current + 1)))
 	row.add_child(_tool_button("?", show_help))
+
+
+## Phones: Sims (the list), the open sim's name, step buttons, help, and a Properties toggle.
+func _build_compact_bar(row: HBoxContainer) -> void:
+	row.add_theme_constant_override("separation", 4)
+	row.add_child(_tool_button("Sims", show_menu))
+	menu_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	menu_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	menu_title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	menu_title.add_theme_font_size_override("font_size", 20)
+	row.add_child(menu_title)
+	for b in [_tool_button("<", func() -> void: open_sim(current - 1 if current != -1 else SIMS.size() - 1)),
+			_tool_button(">", func() -> void: open_sim(current + 1)),
+			_tool_button("?", show_help)]:
+		b.custom_minimum_size.x = 44 * k
+		row.add_child(b)
+	props_btn.text = "Props"
+	props_btn.toggle_mode = true
+	props_btn.button_pressed = panel_open
+	props_btn.custom_minimum_size = Vector2(0, 36 * k)
+	props_btn.toggled.connect(func(on: bool) -> void:
+		panel_open = on
+		_layout())
+	row.add_child(props_btn)
 
 
 func _style_menu(m: MenuButton) -> void:
@@ -238,20 +299,17 @@ func _build_browser() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(scroll)
+	scrollers.append(scroll)
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	list.add_theme_constant_override("separation", 0)
 	scroll.add_child(list)
 	browser_rows.resize(SIMS.size())
-	for g in GROUPS:
-		list.add_child(_group_label(g))
-		for i in SIMS.size():
-			if SIMS[i].get("group", "Physics") != g:
-				continue
-			var b := _list_row(SIMS[i])
-			b.pressed.connect(open_sim.bind(i))
-			browser_rows[i] = b
-			list.add_child(b)
+	for i in SIMS.size():
+		var b := _list_row(SIMS[i])
+		b.pressed.connect(open_sim.bind(i))
+		browser_rows[i] = b
+		list.add_child(b)
 
 
 func _list_row(info: Dictionary) -> Button:
@@ -259,7 +317,7 @@ func _list_row(info: Dictionary) -> Button:
 	b.text = info.title
 	b.toggle_mode = true
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	b.custom_minimum_size.y = 36
+	b.custom_minimum_size.y = 36 * k
 	b.icon = _swatch(info.color)
 	b.add_theme_constant_override("icon_max_width", 10)
 	b.add_theme_constant_override("h_separation", 10)
@@ -275,23 +333,13 @@ func _list_row(info: Dictionary) -> Button:
 	return b
 
 
-func _group_label(text: String) -> Control:
-	var l := Label.new()
-	l.text = "  " + text.to_upper()
-	l.custom_minimum_size.y = 30
-	l.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	l.add_theme_color_override("font_color", DIM_TEXT)
-	l.add_theme_font_size_override("font_size", 16)
-	return l
-
-
 func _panel_header(text: String, label: Label = null) -> Control:
 	var head := PanelContainer.new()
 	var s := _flat(C_FACE_LO, C_EDGE, 0, 0, 1)
 	s.content_margin_left = 10
 	s.content_margin_right = 10
 	head.add_theme_stylebox_override("panel", s)
-	head.custom_minimum_size.y = HEAD_H
+	head.custom_minimum_size.y = HEAD_H * k
 	var l := label if label else Label.new()
 	l.text = text
 	l.add_theme_font_size_override("font_size", 16)
@@ -308,15 +356,22 @@ func _build_panel() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 0)
 	panel.add_child(box)
-	box.add_child(_panel_header("PROPERTIES", panel_title))
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	box.add_child(scroll)
+	var head := _panel_header("PROPERTIES", panel_title)
+	box.add_child(head)
+	# On a phone held upright the header is the sheet's handle: tap it to pull the sheet taller
+	head.gui_input.connect(func(event: InputEvent) -> void:
+		if compact and event is InputEventMouseButton and not event.pressed \
+				and event.button_index == MOUSE_BUTTON_LEFT and size.y > size.x:
+			sheet_tall = not sheet_tall
+			_layout())
+	panel_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(panel_scroll)
+	scrollers.append(panel_scroll)
 	var inner := _margin(10, 8)
 	inner.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	inner.add_theme_constant_override("margin_right", 16) # clear of the scrollbar
-	scroll.add_child(inner)
+	inner.add_theme_constant_override("margin_right", 16 if not compact else 22) # clear of the scrollbar
+	panel_scroll.add_child(inner)
 	panel_box.add_theme_constant_override("separation", 8)
 	inner.add_child(panel_box)
 
@@ -324,7 +379,8 @@ func _build_panel() -> void:
 func _build_home() -> void:
 	add_child(home)
 	home.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var margin := _margin(24, 20)
+	scrollers.append(home)
+	var margin := _margin(24 if not compact else 12, 20 if not compact else 12)
 	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	home.add_child(margin)
 	var box := VBoxContainer.new()
@@ -339,32 +395,31 @@ func _build_home() -> void:
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.add_theme_color_override("font_color", DIM_TEXT)
 	box.add_child(sub)
-	home_grid.add_theme_constant_override("h_separation", 16)
-	home_grid.add_theme_constant_override("v_separation", 16)
-	box.add_child(home_grid)
-	for g in GROUPS:
-		var col := PanelContainer.new()
-		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		col.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		col.add_theme_stylebox_override("panel", _bevel(C_FACE, C_LIGHT, C_SHADE, C_EDGE))
-		home_grid.add_child(col)
-		var list := VBoxContainer.new()
-		list.add_theme_constant_override("separation", 0)
-		col.add_child(list)
-		var n := 0
-		for i in SIMS.size():
-			n += 1 if SIMS[i].get("group", "Physics") == g else 0
-		list.add_child(_panel_header("%s  (%d)" % [g.to_upper(), n]))
-		for i in SIMS.size():
-			if SIMS[i].get("group", "Physics") != g:
-				continue
-			var row := _list_row(SIMS[i])
-			row.toggle_mode = false
-			row.text = "%s\n%s" % [SIMS[i].title, SIMS[i].blurb]
-			row.custom_minimum_size.y = 58
-			row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			row.pressed.connect(open_sim.bind(i))
-			list.add_child(row)
+	# one list of every sim, in order (read across when it runs in two columns)
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", _bevel(C_FACE, C_LIGHT, C_SHADE, C_EDGE))
+	box.add_child(frame)
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 0)
+	frame.add_child(inner)
+	inner.add_child(_panel_header("SIMULATIONS  (%d)" % SIMS.size()))
+	home_grid.add_theme_constant_override("h_separation", 0)
+	home_grid.add_theme_constant_override("v_separation", 0)
+	inner.add_child(home_grid)
+	for i in SIMS.size():
+		var row := _list_row(SIMS[i])
+		row.toggle_mode = false
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.text = "%s\n%s" % [SIMS[i].title, SIMS[i].blurb]
+		row.custom_minimum_size.y = 58 * k
+		var line := _flat(Color(0, 0, 0, 0), C_SHADE, 0, 0, 1) # a rule between entries
+		line.content_margin_left = 14
+		line.content_margin_top = 6
+		line.content_margin_bottom = 6
+		row.add_theme_stylebox_override("normal", line)
+		row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		row.pressed.connect(open_sim.bind(i))
+		home_grid.add_child(row)
 
 
 func _build_status_bar() -> void:
@@ -472,7 +527,7 @@ func _section(text: String) -> VBoxContainer:
 	var head := Button.new()
 	head.text = "v  " + text.to_upper()
 	head.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	head.custom_minimum_size.y = 30
+	head.custom_minimum_size.y = 30 * k
 	head.add_theme_font_size_override("font_size", 16)
 	head.add_theme_color_override("font_color", DIM_TEXT)
 	var s := _flat(C_FACE_LO, C_EDGE, 0, 0, 1)
@@ -504,35 +559,22 @@ func _slider_row(spec: Dictionary) -> Control:
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_label.size_flags_stretch_ratio = 1.2
 	row.add_child(name_label)
-	var holder := Control.new()
-	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	holder.custom_minimum_size.y = 40
-	row.add_child(holder)
-	var slider := HSlider.new()
-	slider.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	slider.min_value = spec.min
-	slider.max_value = spec.max
-	slider.step = spec.step
-	slider.value = spec.value
-	holder.add_child(slider)
-	var value_label := Label.new()
-	value_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	value_label.add_theme_color_override("font_color", Color.WHITE)
-	value_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7))
-	value_label.add_theme_constant_override("outline_size", 4)
-	holder.add_child(value_label)
-	var fmt: String = spec.get("fmt", "%.1f")
+	var bar := ValueBar.new()
+	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.custom_minimum_size.y = 40 * k
+	bar.min_value = spec.min
+	bar.max_value = spec.max
+	bar.step = spec.step
+	bar.value = spec.value
+	bar.fill = C_ACCENT
+	bar.well = C_INSET
+	bar.edge = C_EDGE
+	bar.fmt = spec.get("fmt", "%.1f")
 	var unit: String = spec.get("unit", "")
 	if unit != "":
-		fmt += " " + unit.replace("%", "%%")
-	value_label.text = fmt % spec.value
-	var on: Callable = spec.on
-	slider.value_changed.connect(func(v: float) -> void:
-		value_label.text = fmt % v
-		on.call(v))
+		bar.fmt += " " + unit.replace("%", "%%")
+	bar.value_changed.connect(spec.on)
+	row.add_child(bar)
 	return row
 
 
@@ -559,7 +601,7 @@ func _choice_row(spec: Dictionary) -> Control:
 		b.button_group = group
 		b.button_pressed = i == spec.value
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.custom_minimum_size = Vector2(84 if many else 0, 42)
+		b.custom_minimum_size = Vector2(84 if many else 0, 42 * k)
 		b.clip_text = not many
 		if i < swatches.size():
 			b.icon = _swatch(swatches[i])
@@ -573,7 +615,7 @@ func _toggle(spec: Dictionary) -> Button:
 	var b := CheckBox.new()
 	b.text = spec.label
 	b.button_pressed = spec.value
-	b.custom_minimum_size = Vector2(130, 36)
+	b.custom_minimum_size = Vector2(130, 36 * k)
 	b.toggled.connect(spec.on)
 	return b
 
@@ -584,6 +626,7 @@ func show_menu() -> void:
 	_close_sim()
 	current = -1
 	help_layer.hide()
+	menu_title.text = ""
 	for b in browser_rows:
 		if b:
 			b.set_pressed_no_signal(false)
@@ -597,8 +640,8 @@ func open_sim(index: int) -> void:
 	var info: Dictionary = SIMS[current]
 	help_layer.hide()
 	tab_title.text = info.title
+	menu_title.text = info.title
 	tab_swatch.color = info.color
-	panel_title.text = "PROPERTIES  -  " + info.title.to_upper()
 	for i in browser_rows.size():
 		if browser_rows[i]:
 			browser_rows[i].set_pressed_no_signal(i == current)
@@ -645,19 +688,22 @@ func _say(text: String, seconds := 0.0) -> void:
 # --- layout and input --------------------------------------------------------
 
 func _layout() -> void:
+	_fit_scale()
 	var vs := size
 	var in_sim := current != -1
 	var landscape := vs.x > vs.y * 1.1
+	var menu_h := MENU_H * k
+	var status_h := STATUS_H if not compact else 30.0
 	menu_bar.position = Vector2.ZERO
-	menu_bar.size = Vector2(vs.x, MENU_H)
-	status_bar.position = Vector2(0, vs.y - STATUS_H)
-	status_bar.size = Vector2(vs.x, STATUS_H)
-	var top := MENU_H
-	var bottom := vs.y - STATUS_H
+	menu_bar.size = Vector2(vs.x, menu_h)
+	status_bar.position = Vector2(0, vs.y - status_h)
+	status_bar.size = Vector2(vs.x, status_h)
+	var top := menu_h
+	var bottom := vs.y - status_h
 	var left := 0.0
 	var right := vs.x
 
-	var show_browser := landscape and browser_open and vs.x >= 980
+	var show_browser := landscape and browser_open and vs.x >= 980 and not compact
 	browser.visible = show_browser
 	if show_browser:
 		var bw := clampf(vs.x * 0.17, 200.0, 260.0)
@@ -669,18 +715,28 @@ func _layout() -> void:
 	panel.visible = show_panel
 	if show_panel:
 		if landscape:
-			var w := clampf(vs.x * 0.27, 300.0, 400.0)
+			var w := clampf(vs.x * (0.36 if compact else 0.27), 300.0, 440.0 if compact else 400.0)
 			panel.position = Vector2(vs.x - w, top)
 			panel.size = Vector2(w, bottom - top)
 			right -= w
+		elif compact:
+			# a bottom sheet: tap its header to pull it up taller or let it back down
+			var h := (bottom - top) * (0.72 if sheet_tall else 0.44)
+			panel.position = Vector2(0, bottom - h)
+			panel.size = Vector2(vs.x, h)
+			bottom -= h
 		else:
 			var h := clampf(vs.y * 0.36, 260.0, 520.0)
 			panel.position = Vector2(0, bottom - h)
 			panel.size = Vector2(vs.x, h)
 			bottom -= h
+	panel_title.text = "PROPERTIES" + ("  -  " + SIMS[current].title.to_upper() if in_sim and not compact else "")
+	if compact and not landscape:
+		panel_title.text += "      (tap: %s)" % ("lower" if sheet_tall else "taller")
 
-	tab_bar.visible = in_sim
-	if in_sim:
+	props_btn.visible = in_sim
+	tab_bar.visible = in_sim and not compact
+	if in_sim and not compact:
 		tab_bar.position = Vector2(left, top)
 		tab_bar.size = Vector2(right - left, TAB_H)
 		top += TAB_H
@@ -699,6 +755,11 @@ func _layout() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# the touches that mouse emulation makes from _cancel_press() land far off screen
+	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and event.position.x < -1000.0:
+		return
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		_drag_scroll(event)
 	if event is InputEventScreenTouch:
 		var p: Vector2 = event.position
 		if event.pressed:
@@ -730,7 +791,69 @@ func _input(event: InputEvent) -> void:
 					open_sim(current + 1)
 
 
+## A finger (or the mouse) dragged up or down over a panel scrolls it, even when the drag
+## starts on a button or a value bar: once it is clearly a scroll, the press is called off so
+## nothing under the finger fires. Widgets in the group "keeps_drags" (curve editors...) keep theirs.
+func _drag_scroll(event: InputEvent) -> void:
+	var p: Vector2 = event.position
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			if drag_index != -1 or help_layer.visible or (sim and area.has_point(p)):
+				return
+			for n in get_tree().get_nodes_in_group("keeps_drags"):
+				if n is Control and n.is_visible_in_tree() and n.get_global_rect().has_point(p):
+					return
+			for s in scrollers:
+				if s.is_visible_in_tree() and s.get_global_rect().has_point(p):
+					drag_scroll = s
+					drag_index = event.index
+					drag_from = p
+					drag_scroll_from = s.scroll_vertical
+					drag_scrolling = false
+					drag_velocity = 0.0
+					fling = null
+					return
+		elif event.index == drag_index:
+			if drag_scrolling:
+				fling = drag_scroll
+				fling_velocity = drag_velocity
+			drag_index = -1
+			drag_scroll = null
+			drag_scrolling = false
+	elif event.index == drag_index and drag_scroll:
+		var d := p - drag_from
+		if not drag_scrolling and absf(d.y) > 12.0 and absf(d.y) > absf(d.x) and not ValueBar.dragging_any:
+			drag_scrolling = true
+			drag_from = p # no jump: scroll from here
+			_cancel_press()
+		if drag_scrolling:
+			drag_scroll.scroll_vertical = int(drag_scroll_from - (p.y - drag_from.y))
+			drag_velocity = -event.velocity.y
+
+
+## Calls off the press a scroll began on, by letting the mouse button go far off screen.
+func _cancel_press() -> void:
+	# first slide off whatever was pressed (a button only fires if the pointer is still on it)...
+	var m := InputEventMouseMotion.new()
+	m.button_mask = MOUSE_BUTTON_MASK_LEFT
+	m.position = Vector2(-10000, -10000)
+	m.global_position = m.position
+	Input.parse_input_event(m)
+	# ...then let go there
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = false
+	e.position = Vector2(-10000, -10000)
+	e.global_position = e.position
+	Input.parse_input_event(e)
+
+
 func _process(delta: float) -> void:
+	if fling:
+		fling.scroll_vertical = int(fling.scroll_vertical + fling_velocity * delta)
+		fling_velocity *= pow(0.03, delta)
+		if absf(fling_velocity) < 30.0:
+			fling = null
 	if message_time > 0.0:
 		message_time -= delta
 	status_tick -= delta
@@ -744,7 +867,9 @@ func _process(delta: float) -> void:
 			line = SIMS[current].blurb
 	status_left.text = line
 	var right := "%d fps" % Engine.get_frames_per_second()
-	if sim and size.x > size.y:
+	if compact and size.y > size.x:
+		right = "" # no room beside the message on an upright phone
+	elif sim and size.x > size.y:
 		right = "%d x %d   %s" % [int(area.size.x), int(area.size.y), right]
 	status_right.text = right
 
@@ -779,7 +904,7 @@ func _margin(h: int, v: int) -> MarginContainer:
 func _tool_button(text: String, on: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(40, 36)
+	b.custom_minimum_size = Vector2(40, 36 * k)
 	b.pressed.connect(on)
 	return b
 

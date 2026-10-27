@@ -41,6 +41,7 @@ func _init(start: Array) -> void:
 	bar.mouse_filter = Control.MOUSE_FILTER_STOP
 	bar.draw.connect(_draw_bar)
 	bar.gui_input.connect(_bar_input)
+	bar.add_to_group("keeps_drags")
 	add_child(bar)
 	# palette for the picked stop
 	var grid := GridContainer.new()

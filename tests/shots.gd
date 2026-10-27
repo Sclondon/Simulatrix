@@ -5,16 +5,22 @@ extends SceneTree
 var main: Control
 var out := "user://shots"
 var portrait := false
+var forced := Vector2i.ZERO # --size=390x844 (a phone at CSS size)
 
 
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--shots="):
 			out = arg.trim_prefix("--shots=")
+		if arg.begins_with("--size="):
+			var wh := arg.trim_prefix("--size=").split("x")
+			forced = Vector2i(int(wh[0]), int(wh[1]))
 		if arg == "--portrait":
 			portrait = true
 	DirAccess.make_dir_recursive_absolute(out)
 	DisplayServer.window_set_size(Vector2i(540, 1170) if portrait else Vector2i(1280, 720))
+	if forced != Vector2i.ZERO:
+		DisplayServer.window_set_size(forced)
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	_run.call_deferred()

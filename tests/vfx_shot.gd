@@ -51,7 +51,7 @@ func _touch(pos: Vector2, pressed: bool) -> void:
 
 func _run() -> void:
 	var script: Script = load(path)
-	main.SIMS.append({title = path.get_file().get_basename().capitalize(), blurb = "", group = "VFX",
+	main.SIMS.append({title = path.get_file().get_basename().capitalize(), blurb = "",
 		color = Color("7aa2ff"), script = script})
 	await _frames(5)
 	main.open_sim(main.SIMS.size() - 1)

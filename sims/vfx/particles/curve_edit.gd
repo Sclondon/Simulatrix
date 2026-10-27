@@ -34,6 +34,7 @@ func _init(start: Array = [[0, 1], [1, 1]]) -> void:
 	area.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	area.draw.connect(_draw_area)
 	area.gui_input.connect(_area_input)
+	area.add_to_group("keeps_drags") # the panel must not scroll when a point is dragged
 	area.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(area)
 	var row := HFlowContainer.new()
