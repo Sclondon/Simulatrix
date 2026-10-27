@@ -18,8 +18,14 @@ func hint() -> String:
 	return ""
 
 
+## One line for the status bar (what the sim is doing right now); empty shows its blurb.
+func status() -> String:
+	return ""
+
+
 ## Describes the control panel. Each entry is a Dictionary:
-##   {type = "slider", label, min, max, step, value, on: Callable(float), fmt = "%.1f"}
+##   {type = "section", label}   groups the rows after it under a folding header
+##   {type = "slider", label, min, max, step, value, on: Callable(float), fmt = "%.1f", unit = ""}
 ##   {type = "toggle", label, value, on: Callable(bool)}
 ##   {type = "choice", label, options: Array[String], value: int, on: Callable(int)}
 ##   {type = "button", label, on: Callable()}

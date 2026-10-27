@@ -45,8 +45,6 @@ func _swipe(points: Array, n: int) -> void:
 
 func _open(i: int) -> Vector2:
 	main.open_sim(i)
-	main.toast.hide()
-	main.toast_time = 0.0
 	return main.area.size
 
 
