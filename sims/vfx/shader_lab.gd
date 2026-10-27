@@ -181,7 +181,8 @@ func help() -> String:
 		+ "shader_type canvas_item draws over the whole preview: UV is 0..1, and the lab fills in resolution (pixels), "
 		+ "mouse (the UV under your finger) and since_poke (seconds since you tapped). shader_type spatial goes on a mesh: "
 		+ "pick it under Preview; drag to orbit, pinch or scroll to zoom, tap to set since_poke.\n\n"
-		+ "My shaders are kept on this device. Export saves a .gdshader file you can drop into a Godot project.")
+		+ "My shaders are kept on this device. Export sends the shader (and a material with the values set here) "
+		+ "to GameCommon's asset library; Send to project... copies it into a game's assets/shaders/.")
 
 
 func hint() -> String:
@@ -262,13 +263,13 @@ func controls() -> Array:
 		{type = "button", label = "Delete", on = _delete},
 		{type = "button", label = "Copy", on = _copy},
 		{type = "button", label = "Paste", on = _paste},
-		{type = "button", label = "Export", on = _export},
 		{type = "section", label = "Editor"},
 		{type = "slider", label = "Font size", min = 10, max = 36, step = 1, value = font_size, fmt = "%d", unit = "px",
 			on = func(v: float) -> void: _set_font_size(int(v))},
 		{type = "toggle", label = "Auto compile", value = auto_compile, on = func(on: bool) -> void: auto_compile = on},
 		{type = "button", label = "Compile", on = func() -> void: _compile(true)},
 	])
+	c.append_array(Exporter.controls(title, _export, "shaders", _say))
 	return c
 
 
@@ -643,23 +644,26 @@ func _paste() -> void:
 	_open_text(text)
 
 
-func _export() -> void:
-	var fname := title.to_snake_case().validate_filename()
-	if fname == "":
-		fname = "shader"
-	fname += ".gdshader"
-	if OS.has_feature("web"):
-		JavaScriptBridge.download_buffer(code.text.to_utf8_buffer(), fname, "text/plain")
-		_say("Downloading %s" % fname)
+## Sends the shader that is showing (the last one that compiled) to the asset library: the
+## .gdshader, and a .material.tres that carries it with the uniform values set here.
+func _export(asset_name: String) -> void:
+	if not live_mat.shader or live_mat.shader.code == "":
+		_say("Nothing compiled to export yet")
 		return
-	DirAccess.make_dir_recursive_absolute("user://exports")
-	var path := "user://exports/" + fname
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f:
-		f.store_string(code.text)
-		_say("Exported to %s" % ProjectSettings.globalize_path(path))
-	else:
-		_say("Couldn't write %s" % path)
+	var file := Exporter.slug(asset_name)
+	var mat := ShaderMaterial.new()
+	mat.shader = Shader.new()
+	mat.shader.code = live_mat.shader.code
+	for u: Dictionary in uniforms:
+		mat.set_shader_parameter(u.name, values[u.name])
+	var target := "a CanvasItem (Sprite2D, ColorRect, TextureRect...)" if mode == "canvas_item" \
+		else "a MeshInstance3D (material_override, or a surface's material)"
+	var use := "# %s shader, for %s\n" % [mode, target]
+	use += "var mat := load(\"res://assets/shaders/%s.material.tres\") as ShaderMaterial   # with the values set in the lab\n" % file
+	use += "# or from the bare shader: var mat := ShaderMaterial.new(); mat.shader = load(\"res://assets/shaders/%s.gdshader\")\n" % file
+	use += ("$Sprite.material = mat" if mode == "canvas_item" else "$Mesh.material_override = mat")
+	_say(Exporter.save("shaders", asset_name, {"gdshader": live_mat.shader.code, "material.tres": mat}, [], use,
+		"Shader Lab"))
 
 
 func _say(text: String) -> void:

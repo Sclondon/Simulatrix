@@ -67,9 +67,10 @@ func help() -> String:
 		+ "stretched or flat, additive or alpha, a light).\n\n"
 		+ "Burst emitters fire together every Cycle seconds, each after its Delay. Sub-emitter: when this "
 		+ "emitter's particles die they set off another emitter where they died (fireworks).\n\n"
-		+ "Library: Save keeps effects on this device; Copy and Paste move them as JSON; Export .tscn writes a "
-		+ "Godot scene of GPUParticles3D nodes you can drop into a game (sub-emitters there need Forward+ or "
-		+ "Mobile; start delays are in each node's metadata).\n\n"
+		+ "Library: Save keeps effects on this device; Copy and Paste move them as JSON.\n\n"
+		+ "Export sends the effect to GameCommon's asset library as a Godot scene of GPUParticles3D nodes "
+		+ "(and its JSON); Send to project... copies it into a game's assets/effects/ (sub-emitters there "
+		+ "need Forward+ or Mobile; start delays are in each node's metadata).\n\n"
 		+ "Drag to orbit, pinch or scroll to zoom. Set Finger to Poke to drag the effect and see it trail.")
 
 
@@ -847,7 +848,6 @@ func controls() -> Array:
 		{type = "button", label = "Save", on = _save_effect},
 		{type = "button", label = "Copy JSON", on = _copy_json},
 		{type = "button", label = "Paste JSON", on = _paste_json},
-		{type = "button", label = "Export .tscn", on = _export_tscn},
 
 		{type = "section", label = "View"},
 		{type = "choice", label = "Backdrop", options = BACKDROPS, value = backdrop, on = func(k: int) -> void:
@@ -863,6 +863,7 @@ func controls() -> Array:
 			glow = v
 			_apply_view()},
 	])
+	c.append_array(Exporter.controls(fx.name, _export, "effects", func(t: String) -> void: _say(t)))
 	return c
 
 
@@ -1168,10 +1169,19 @@ func _paste_json() -> void:
 	_say("Pasted " + fx.name)
 
 
-func _export_tscn() -> void:
-	var safe: String = fx.name.to_snake_case().validate_filename()
-	if safe == "":
-		safe = "effect"
+## Sends the effect to the asset library: the scene (GPUParticles3D nodes, as shown) and its JSON.
+func _export(asset_name: String) -> void:
+	var scene := effect_scene()
+	var file := Exporter.slug(asset_name)
+	_say(Exporter.save("effects", asset_name, {"tscn": scene, "json": JSON.stringify(fx, "  ")}, [],
+		"var fx := (load(\"res://assets/effects/%s.tscn\") as PackedScene).instantiate()\nadd_child(fx)\n" % file
+		+ "# one-shot effects: set each GPUParticles3D's emitting = true to fire it again",
+		"Particle Editor"))
+	scene.free()
+
+
+## The effect as a scene: a Node3D with a GPUParticles3D for each emitter that is on.
+func effect_scene() -> Node3D:
 	var out := Node3D.new()
 	out.name = fx.name.to_pascal_case().validate_node_name()
 	var made := {}
@@ -1204,25 +1214,4 @@ func _export_tscn() -> void:
 	for i: int in made:
 		if runs[i].tracked and made.has(int(fx.emitters[i].sub)):
 			made[i].sub_emitter = made[i].get_path_to(made[int(fx.emitters[i].sub)])
-	_own(out, out)
-	var packed := PackedScene.new()
-	packed.pack(out)
-	out.free()
-	DirAccess.make_dir_recursive_absolute("user://exports")
-	var path := "user://exports/%s.tscn" % safe
-	var err := ResourceSaver.save(packed, path)
-	if err != OK:
-		_say("Export failed (%s)" % error_string(err))
-		return
-	if OS.has_feature("web") and Engine.has_singleton("JavaScriptBridge"):
-		var bytes := FileAccess.get_file_as_bytes(path)
-		Engine.get_singleton("JavaScriptBridge").download_buffer(bytes, safe + ".tscn", "text/plain")
-		_say("Downloading %s.tscn" % safe)
-	else:
-		_say("Exported to " + ProjectSettings.globalize_path(path))
-
-
-func _own(node: Node, owner_node: Node) -> void:
-	for child in node.get_children():
-		child.owner = owner_node
-		_own(child, owner_node)
+	return out

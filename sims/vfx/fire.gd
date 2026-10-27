@@ -385,7 +385,24 @@ func controls() -> Array:
 				s.queue_free()
 			small.clear()},
 	])
+	c.append_array(Exporter.controls("%s %s" % [COLOURS[tone], PRESETS[preset]], _export, "fire",
+		func(t: String) -> void: say.emit(t)))
 	return c
+
+
+## Sends the big fire's settings to the asset library as a scene: one Fire node (GameCommon's
+## component builds its flames, sparks, smoke and light itself), its foot at the scene's origin.
+## What it stands on here (logs, stones, a candle) stays in the lab.
+func _export(asset_name: String) -> void:
+	var made := NodeCopy.fresh(fire, asset_name.to_pascal_case().validate_node_name())
+	(made as Node3D).position = Vector3.ZERO
+	var file := Exporter.slug(asset_name)
+	say.emit(Exporter.save("fire", asset_name, {"tscn": made}, ["godot/fire"],
+		"var fire := (load(\"res://assets/fire/%s.tscn\") as PackedScene).instantiate() as Fire\n" % file
+		+ "add_child(fire)   # its foot at the node's origin: stand it on your logs or candle\n"
+		+ "# change it live like any Fire: fire.size, fire.lean (wind), fire.light...",
+		"Fire"))
+	made.free()
 
 
 func help() -> String:

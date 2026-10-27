@@ -59,7 +59,10 @@ func _run() -> void:
 			# press every button and toggle, pick the last option of every choice
 			for spec in main.sim.controls():
 				match spec.type:
-					"button": spec.on.call()
+					"button":
+						# not the export buttons: they write into the real asset library, open folders and dialogs
+						if not spec.label in ["Export", "Send to project...", "Open folder"]:
+							spec.on.call()
 					"toggle":
 						spec.on.call(not spec.value)
 						spec.on.call(spec.value)

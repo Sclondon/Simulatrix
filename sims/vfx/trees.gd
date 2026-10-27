@@ -271,7 +271,66 @@ func controls() -> Array:
 		]
 		for k in painted_rows.size():
 			c.insert(at + k, painted_rows[k])
+	c.append_array(Exporter.controls("%s %d" % [SPECIES[species], tree_seed], _export, "trees",
+		func(t: String) -> void: say.emit(t)))
 	return c
+
+
+# --- export ----------------------------------------------------------------------
+
+## Sends the tree on the turntable (never the forest) to the asset library. A pine or broadleaf
+## goes as its generator (a PineTree / LeafyTree .tres: the same settings make the same tree in
+## any project with the component), its baked mesh, and a .glb for Blender and other tools. A
+## painted tree or a bush goes as a scene (its trunk and leaf clumps with the kit's materials,
+## lit from the lab's sun), the settings it was made from, and a .glb.
+func _export(asset_name: String) -> void:
+	var file := Exporter.slug(asset_name)
+	if _is_painted() or _is_bush():
+		var scene := Node3D.new()
+		scene.name = asset_name.to_pascal_case().validate_node_name()
+		if tree.visible and tree.mesh:
+			var trunk := MeshInstance3D.new()
+			trunk.name = "Trunk"
+			trunk.mesh = tree.mesh
+			trunk.material_override = tree.material_override
+			scene.add_child(trunk)
+		for child in painted.get_children():
+			var copy := child.duplicate()
+			scene.add_child(copy)
+		var settings := {species = SPECIES[species], seed = tree_seed, mods = mods, leaf = LEAF_NAMES[leaf_kind],
+			season = season, bush = BUSH_NAMES[bush_kind], sun_dir = [SUN_DIR.x, SUN_DIR.y, SUN_DIR.z]}
+		var glb := _glb(scene)
+		say.emit(Exporter.save("trees", asset_name, {"tscn": scene, "glb": glb, "json": JSON.stringify(settings, "  ")},
+			["godot/painted-woodland"],
+			"var tree := (load(\"res://assets/trees/%s.tscn\") as PackedScene).instantiate()\nadd_child(tree)\n" % file
+			+ "# lit by hand from the sun in %s.json (sun_dir): for another sun, set each material's sun_dir" % file,
+			"Tree Lab"))
+		scene.free()
+		return
+	var made := _make()
+	made.material = null # drawn by the component's own shader in the project, as in any game
+	var shown: MeshInstance3D = made.instance()
+	var holder := Node3D.new()
+	holder.name = asset_name.to_pascal_case().validate_node_name()
+	holder.add_child(shown)
+	var cls := "PineTree" if _is_pine() else "LeafyTree"
+	var use := "var tree := (load(\"res://assets/trees/%s.tres\") as %s).instance()   # from its settings\n" % [file, cls]
+	use += "add_child(tree)\n"
+	use += "# or a whole wood: %s.forest(self, points, load(\"res://assets/trees/%s.tres\"))\n" % [cls, file]
+	use += "# or the baked mesh: var mi := MeshInstance3D.new(); mi.mesh = load(\"res://assets/trees/%s.mesh.res\")" % file
+	say.emit(Exporter.save("trees", asset_name, {"tres": made, "mesh.res": shown.mesh, "glb": _glb(holder)},
+		["godot/pine-tree" if _is_pine() else "godot/leafy-tree"], use, "Tree Lab"))
+	holder.free()
+
+
+## A node's meshes as a binary glTF, for Blender and other tools (vertex colours come along;
+## Godot shaders do not).
+func _glb(node: Node) -> PackedByteArray:
+	var doc := GLTFDocument.new()
+	var state := GLTFState.new()
+	if doc.append_from_scene(node, state) != OK:
+		return PackedByteArray()
+	return doc.generate_buffer(state)
 
 
 ## Which panel a species wants: 0 the cel-shaded trees, 1 the painted trees, 2 a bush.

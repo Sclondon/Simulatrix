@@ -455,7 +455,27 @@ func controls() -> Array:
 			for i in 10:
 				_drop_pebble(Vector3(randf_range(-3.5, 3.5), 0.0, randf_range(-2.5, 2.5)) + Vector3.UP * randf() * 3.0)},
 	])
+	c.append_array(Exporter.controls("%s pond" % LOOKS[look][0], _export, "water",
+		func(t: String) -> void: say.emit(t)))
 	return c
+
+
+## Sends the water's settings to the asset library as a scene: one Water node (GameCommon's
+## component draws itself), its surface at the scene's origin. The basin, rocks and pads stay here.
+func _export(asset_name: String) -> void:
+	if body == 1:
+		say.emit("The stream is the painted-woodland kit's Woodland.add_stream: switch Body to Pond to export water")
+		return
+	var made := NodeCopy.fresh(water, asset_name.to_pascal_case().validate_node_name())
+	(made as Node3D).position = Vector3.ZERO
+	var file := Exporter.slug(asset_name)
+	say.emit(Exporter.save("water", asset_name, {"tscn": made}, ["godot/water"],
+		"var water := (load(\"res://assets/water/%s.tscn\") as PackedScene).instantiate() as Water\n" % file
+		+ "add_child(water)   # the node is the middle of the surface; water.size = Vector3(width, depth, length)\n"
+		+ ("water.sides = true   # its sides were off here (it sat in a dug basin): on for a box seen from outside\n" if not water.sides else "")
+		+ "water.watch(some_body)   # anything that should splash and leave rings",
+		"Pond"))
+	made.free()
 
 
 func help() -> String:

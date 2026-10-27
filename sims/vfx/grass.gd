@@ -201,7 +201,25 @@ func controls() -> Array:
 				Grass.unpush(ball)},
 		{type = "button", label = "Blast", on = func() -> void: Grass.blast(Vector3.ZERO, 1.6)},
 	])
+	list.append_array(Exporter.controls("%s grass" % PRESETS[preset].name, _export, "grass",
+		func(t: String) -> void: say.emit(t)))
 	return list
+
+
+## Sends the field's settings (blades, colours, flowers, wind, size) to the asset library as a
+## scene: one Grass node, which builds itself when the project calls build().
+func _export(asset_name: String) -> void:
+	var made := NodeCopy.fresh(grass, asset_name.to_pascal_case().validate_node_name())
+	var file := Exporter.slug(asset_name)
+	var p: Dictionary = PRESETS[preset]
+	say.emit(Exporter.save("grass", asset_name, {"tscn": made}, ["godot/grass"],
+		"var grass := (load(\"res://assets/grass/%s.tscn\") as PackedScene).instantiate() as Grass\n" % file
+		+ "grass.area = Rect2(-20, -20, 40, 40)   # world x, z (it was %s here); keep the node at the origin\n" % str(grass.area)
+		+ "add_child(grass)\ngrass.build()\n"
+		+ "Grass.push(player)   # anything that should part it\n"
+		+ "# ground under it in its root colour: Color(%.2f, %.2f, %.2f)" % [p.ground.r, p.ground.g, p.ground.b],
+		"Grass"))
+	made.free()
 
 
 func _apply_preset() -> void:

@@ -4,8 +4,8 @@ extends Sim3D
 ## small shader made for the current type and basis from texture_gen.gdshaderinc, built
 ## when first picked and cached. The output pass (out_vp, texture_post.gdshader) colours
 ## it through the ramp or shows height or a normal map. Previews: flat, tiled 3x3, on a
-## sphere, or as lit terrain. Save PNG renders both passes at the export size and
-## downloads (web) or saves to user://.
+## sphere, or as lit terrain. Export renders colour, normal and height at the export size and
+## sends them, with the settings, to the asset library (see sims/exporter.gd).
 
 const GEN_LIB := preload("res://sims/vfx/texture_gen.gdshaderinc")
 const POST_SHADER := preload("res://sims/vfx/texture_post.gdshader")
@@ -106,7 +106,8 @@ func help() -> String:
 		+ "posterize and a normal-map view. Seamless makes every type tile exactly; check it on Tiled. "
 		+ "(Rotation only applies with Seamless off.)\n\n"
 		+ "Flat and Tiled: drag to pan, pinch or scroll to zoom. Sphere and Terrain: drag to orbit. "
-		+ "Save PNG exports the current view (colour, height or normal) at the chosen size.")
+		+ "Export renders colour, normal map and height at the chosen size and sends them, with the settings, to "
+		+ "GameCommon's asset library; Send to project... copies them into a game's assets/textures/.")
 
 
 func hint() -> String:
@@ -385,11 +386,15 @@ func controls() -> Array:
 			queue_redraw()},
 		{type = "button", label = "Reset view", on = func() -> void: _set_preview(preview)},
 
-		{type = "section", label = "Export"},
-		{type = "choice", label = "Size", options = ["512", "1024"], value = 1 if export_size == 1024 else 0,
-			on = func(i: int) -> void: export_size = 1024 if i == 1 else 512},
-		{type = "button", label = "Save PNG", on = save_png},
-	]
+	] + _export_controls()
+
+
+## The Export section, with the size to render at just under its header.
+func _export_controls() -> Array:
+	var c := Exporter.controls("%s %d" % [TYPES[gen_type], seed_value], export_asset, "textures", _say)
+	c.insert(1, {type = "choice", label = "Size", options = ["512", "1024"], value = 1 if export_size == 1024 else 0,
+		on = func(i: int) -> void: export_size = 1024 if i == 1 else 512})
+	return c
 
 
 func _set_preview(i: int) -> void:
@@ -425,8 +430,9 @@ func _say(text: String) -> void:
 	_msg_time = 6.0
 
 
-## Renders the current output at the export size and downloads or saves it.
-func save_png() -> void:
+## Renders the texture at the export size as colour, normal map and height, and sends the three
+## PNGs and the settings (to make it again) to the asset library.
+func export_asset(asset_name: String) -> void:
 	if _saving:
 		return
 	_saving = true
@@ -434,22 +440,34 @@ func save_png() -> void:
 	_size_passes(n)
 	height_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
-	# the output pass reads the new height on the frame after
-	out_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	await RenderingServer.frame_post_draw
-	var img := out_vp.get_texture().get_image()
+	# the output pass reads the new height on the frame after; once for each view
+	var files := {}
+	for pass_view: Array in [[0, "png"], [2, "normal.png"], [1, "height.png"]]:
+		post_mat.set_shader_parameter("view_mode", pass_view[0])
+		out_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		await RenderingServer.frame_post_draw
+		files[pass_view[1]] = out_vp.get_texture().get_image().save_png_to_buffer()
+	post_mat.set_shader_parameter("view_mode", view)
 	_size_passes(TEX)
 	_dirty = true
 	_saving = false
-	var file := "%s_%d_%d.png" % [TYPES[gen_type].to_lower(), seed_value, n]
-	if OS.has_feature("web"):
-		JavaScriptBridge.download_buffer(img.save_png_to_buffer(), file, "image/png")
-		_say("Downloaded " + file)
-	else:
-		DirAccess.make_dir_recursive_absolute("user://textures")
-		var path := "user://textures/" + file
-		var err := img.save_png(path)
-		_say(("Saved " + ProjectSettings.globalize_path(path)) if err == OK else "Save failed (%d)" % err)
+	files["json"] = JSON.stringify(settings(), "  ")
+	var file := Exporter.slug(asset_name)
+	var use := "var mat := StandardMaterial3D.new()\n"
+	use += "mat.albedo_texture = load(\"res://assets/textures/%s.png\")\n" % file
+	use += "mat.normal_enabled = true\nmat.normal_texture = load(\"res://assets/textures/%s.normal.png\")\n" % file
+	use += "# %s.height.png is the height (grey) for displacement or a heightmap; %s.json remakes it in Texture Lab" % [file, file]
+	if seamless:
+		use += "\n# it tiles: mat.uv1_scale = Vector3(4, 4, 1)"
+	_say(Exporter.save("textures", asset_name, files, [], use, "Texture Lab"))
+
+
+## Every setting that makes the texture, as saved beside it.
+func settings() -> Dictionary:
+	return {type = TYPES[gen_type], basis = basis, seed = seed_value, scale = tex_scale, octaves = octaves,
+		lacunarity = lacunarity, gain = gain, warp = warp, jitter = jitter, rotation = rotation_deg,
+		time = anim_time, ramp = _ramp_name(), contrast = contrast, level_lo = level_lo, level_hi = level_hi,
+		posterize = posterize, bump = bump, invert = invert, seamless = seamless, size = export_size}
 
 
 func _size_passes(n: int) -> void:

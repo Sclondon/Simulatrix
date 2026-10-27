@@ -274,7 +274,46 @@ func controls() -> Array:
 				Sand.refresh()
 				land.refit()},
 	])
+	c.append_array(Exporter.controls("%s %s" % [SANDS[sand_look], TERRAINS[terrain]], _export, "sand",
+		func(t: String) -> void: say.emit(t)))
 	return c
+
+
+## Sends the sand to the asset library as a scene of the ground's and the wind's settings (a
+## SandGround "Ground" and a SandWind "Wind"). The lie of the land is code (SandDunes), so the use
+## lines carry the very calls that made these dunes, and the paint for this kind of sand.
+func _export(asset_name: String) -> void:
+	var root := Node3D.new()
+	root.name = asset_name.to_pascal_case().validate_node_name()
+	root.add_child(NodeCopy.fresh(land, "Ground"))
+	root.add_child(NodeCopy.fresh(wind, "Wind"))
+	var file := Exporter.slug(asset_name)
+	var d := Vector2.from_angle(deg_to_rad(wind_angle))
+	var use := "var sand := (load(\"res://assets/sand/%s.tscn\") as PackedScene).instantiate()\n" % file
+	use += "var ground := sand.get_node(\"Ground\") as SandGround\n"
+	match terrain:
+		0:
+			use += "ground.height = func(_x: float, _z: float) -> float: return 0.0   # flat\n"
+		_:
+			use += "var dunes := SandDunes.new()\ndunes.wind = Vector2(%.3f, %.3f)\ndunes.floor_roll = 0.0\n" % [d.x, d.y]
+			match terrain:
+				1:
+					use += "dunes.add_barchan(Vector2(-9.0, -7.0), 13.0, 2.6)\ndunes.add_barchan(Vector2(10.0, 9.0), 9.0, 1.6)\n"
+				2:
+					use += "dunes.add_ridge(Vector2(-18.0, -9.0), Vector2(18.0, -6.0), 2.4, 0.08, 2)\n"
+					use += "dunes.add_ridge(Vector2(-18.0, 10.0), Vector2(18.0, 12.0), 1.8, 0.08, 1)\n"
+				3:
+					use += "dunes.add_star(Vector2(-8.0, -8.0), 9.0, 3.2, 3, 1)\n"
+			use += "ground.height = dunes.height_at\n"
+	use += "add_child(sand)   # the ground builds itself once it has a height\n"
+	var look: Array = SAND_LOOKS[sand_look]
+	if look[1] >= 0:
+		use += "ground.paint(Sand.Kind.%s, Vector2.ZERO, %.1f)   # this kind of sand everywhere\n" % [Sand.Kind.find_key(look[1]), HALF * 3.0]
+	if sand_look == 3:
+		use += "var m := ground.material(); m.set_shader_parameter(&\"sparkle\", 3.0); m.set_shader_parameter(&\"sparkle_aim\", 0.965)\n"
+	use += "ground.focus = player   # where its fine mesh and patch of prints follow; footprints: ground.mark / ground.trail"
+	say.emit(Exporter.save("sand", asset_name, {"tscn": root}, ["godot/sand"], use, "Sand"))
+	root.free()
 
 
 func help() -> String:
