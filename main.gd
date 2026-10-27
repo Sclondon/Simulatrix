@@ -37,6 +37,8 @@ var SIMS := [
 		color = Color("e8913a"), script = preload("res://sims/vfx/woodland.gd")},
 	{title = "Sand", blurb = "Draw, paint and pour sand while the wind blows.", group = "VFX",
 		color = Color("e2b46b"), script = preload("res://sims/vfx/sand3d.gd")},
+	{title = "Texture Lab", blurb = "Procedural noise and material textures on the GPU: tile, preview in 3D, save PNG.",
+		group = "VFX", color = Color("9f8cff"), script = preload("res://sims/vfx/texture_lab.gd")},
 ]
 const GROUPS := ["Physics", "VFX"]
 
