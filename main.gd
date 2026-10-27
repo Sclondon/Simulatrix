@@ -45,6 +45,8 @@ var SIMS := [
 		color = Color("e2b46b"), script = preload("res://sims/vfx/sand3d.gd")},
 	{title = "Texture Lab", blurb = "Procedural noise and material textures on the GPU: tile, preview in 3D, save PNG.",
 		group = "VFX", color = Color("9f8cff"), script = preload("res://sims/vfx/texture_lab.gd")},
+	{title = "Particle Editor", blurb = "Layer emitters into effects, Unity / Godot style, and export them as Godot scenes.",
+		group = "VFX", color = Color("ff9f43"), script = preload("res://sims/vfx/particles.gd")},
 ]
 const GROUPS := ["Physics", "VFX"]
 
@@ -73,6 +75,7 @@ var area := Rect2()
 var panel_open := true
 var browser_open := true
 var active := {} # touch indices that began inside the sim area
+var folded := {} # section label -> true when folded, for the open sim
 var message := ""
 var message_time := 0.0
 var status_tick := 0.0
@@ -479,8 +482,12 @@ func _section(text: String) -> VBoxContainer:
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 8)
 	wrap.add_child(rows)
+	# folds survive the panel being rebuilt (a sim emitting controls_changed)
+	rows.visible = not folded.get(text, false)
+	head.text = ("v  " if rows.visible else ">  ") + text.to_upper()
 	head.pressed.connect(func() -> void:
 		rows.visible = not rows.visible
+		folded[text] = not rows.visible
 		head.text = ("v  " if rows.visible else ">  ") + text.to_upper())
 	return rows
 
@@ -594,6 +601,7 @@ func open_sim(index: int) -> void:
 		if browser_rows[i]:
 			browser_rows[i].set_pressed_no_signal(i == current)
 	_layout()
+	folded.clear()
 	sim = info.script.new()
 	sim.size = area.size
 	sim_layer.add_child(sim)
