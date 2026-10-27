@@ -1,10 +1,14 @@
 extends Sim3D
-## Texture Lab: a procedural texture generator. texture_gen.gdshader draws the texture into
-## a 512² SubViewport on the GPU (and a second copy as plain height for the 3D previews),
-## so every slider is live. Previews: flat, tiled 3x3, on a sphere, or as lit terrain.
-## Save PNG renders it again at the export size and downloads (web) or saves it to user://.
+## Texture Lab: a procedural texture generator on the GPU, in two passes of 512² SubViewports.
+## The generator pass (height_vp) draws the finished height, packed in two bytes, with a
+## small shader made for the current type and basis from texture_gen.gdshaderinc, built
+## when first picked and cached. The output pass (out_vp, texture_post.gdshader) colours
+## it through the ramp or shows height or a normal map. Previews: flat, tiled 3x3, on a
+## sphere, or as lit terrain. Save PNG renders both passes at the export size and
+## downloads (web) or saves to user://.
 
-const GEN_SHADER := preload("res://sims/vfx/texture_gen.gdshader")
+const GEN_LIB := preload("res://sims/vfx/texture_gen.gdshaderinc")
+const POST_SHADER := preload("res://sims/vfx/texture_post.gdshader")
 const PREVIEW_SHADER := preload("res://sims/vfx/texture_preview.gdshader")
 const TEX := 512
 const PLANE := 10.0
@@ -38,18 +42,21 @@ const RAMP_CHOICES := ["Auto", "Greyscale", "Heat", "Terrain", "Lava", "Ice", "T
 ## What Auto picks for each type
 const AUTO_RAMP := {9: "Wood", 10: "Marble", 11: "Brick", 12: "Bark", 13: "Sky", 14: "Sand", 15: "Water"}
 
-var gen_type := 8
+## Generator shaders by "type:basis", shared by every visit to the lab
+static var _shaders := {}
+
+var gen_type := 5 # FBM: cheap to build, so the lab opens at once
 var basis := 1
 var seed_value := 1234
 var tex_scale := 4.0
 var octaves := 6
 var lacunarity := 2.0
 var gain := 0.5
-var warp := 0.6
+var warp := 0.0
 var jitter := 1.0
 var rotation_deg := 0.0
 var evolve := 0.0
-var ramp := 4 # Lava
+var ramp := 3 # Terrain
 var view := 0
 var contrast := 1.0
 var level_lo := 0.0
@@ -63,11 +70,12 @@ var relief := 1.5
 var tile_edges := false
 var export_size := 1024
 
-var gen_vp := SubViewport.new()
-var height_vp := SubViewport.new()
-var gen_rect := ColorRect.new()
+var height_vp := SubViewport.new() # generator pass: packed height
+var out_vp := SubViewport.new() # output pass: what is shown and saved
+var height_rect := ColorRect.new()
+var out_rect := ColorRect.new()
 var gen_mat := ShaderMaterial.new()
-var height_mat := ShaderMaterial.new()
+var post_mat := ShaderMaterial.new()
 var ramp_tex := GradientTexture1D.new()
 var sphere := MeshInstance3D.new()
 var terrain := MeshInstance3D.new()
@@ -80,8 +88,8 @@ var anim_time := 0.0
 var _flat_touches := {}
 var _pinch2 := 0.0
 var _mid2 := Vector2.ZERO
-var _dirty := true
-var _height_stale := true
+var _dirty := true # the generator must run again
+var _post_frames := 0 # frames left to redraw the output pass
 var _saving := false
 var _msg := ""
 var _msg_time := 0.0
@@ -123,19 +131,26 @@ func status() -> String:
 func build() -> void:
 	_font = load("res://fonts/PixelifySans.ttf") if ResourceLoader.exists("res://fonts/PixelifySans.ttf") \
 		else ThemeDB.fallback_font
-	_make_gen(gen_vp, gen_mat, gen_rect)
-	_make_gen(height_vp, height_mat, ColorRect.new())
+	gen_mat.shader = _gen_shader()
+	post_mat.shader = POST_SHADER
+	post_mat.set_shader_parameter("height_tex", height_vp.get_texture())
+	_make_pass(height_vp, gen_mat, height_rect)
+	_make_pass(out_vp, post_mat, out_rect)
 	ramp_tex.width = 256
 
-	set_sky(Color("2a2d34"), Color("575b66"), Color("1b1d22"))
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_energy = 0.7
+	# A flat backdrop and ambient colour rather than a sky: one less shader to compile on the
+	# web the first time a 3D preview opens
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color("24262c")
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color("8a8f9c")
+	environment.ambient_light_energy = 0.55
 	sun.rotation = Vector3(deg_to_rad(-38), deg_to_rad(-40), 0)
 	sun.light_energy = 1.3
 
 	for m: ShaderMaterial in [sphere_mat, terrain_mat]:
 		m.shader = PREVIEW_SHADER
-		m.set_shader_parameter("albedo_tex", gen_vp.get_texture())
+		m.set_shader_parameter("albedo_tex", out_vp.get_texture())
 		m.set_shader_parameter("height_tex", height_vp.get_texture())
 	sphere_mat.set_shader_parameter("uv_scale", Vector2(2, 1))
 	sphere_mat.set_shader_parameter("texel", 1.0 / TEX)
@@ -161,29 +176,56 @@ func build() -> void:
 	_set_preview(preview)
 
 
-func _make_gen(vp: SubViewport, mat: ShaderMaterial, rect: ColorRect) -> void:
+func _make_pass(vp: SubViewport, mat: ShaderMaterial, rect: ColorRect) -> void:
 	vp.size = Vector2i(TEX, TEX)
 	vp.disable_3d = true
 	vp.transparent_bg = false
 	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-	mat.shader = GEN_SHADER
 	rect.size = Vector2(TEX, TEX)
 	rect.material = mat
 	vp.add_child(rect)
 	add_child(vp)
 
 
+## The generator shader for the current type and basis: only the code that type calls,
+## so each one compiles quickly (WebGL on ANGLE/D3D chokes on one shader holding all).
+func _gen_shader() -> Shader:
+	var key := "%d:%d" % [gen_type, basis]
+	if not _shaders.has(key):
+		var uses := {
+			USE_VALUE = basis == 0 or gen_type in [0, 11, 14],
+			USE_PERLIN = basis == 1 or gen_type in [1, 9, 12],
+			USE_SIMPLEX = basis == 2 or gen_type == 2,
+			USE_WORLEY = gen_type in [3, 4, 15],
+		}
+		var defs := "#define GEN %d\n#define BASIS %d\n" % [gen_type, basis]
+		for name: String in uses:
+			if uses[name]:
+				defs += "#define %s\n" % name
+		var shader := Shader.new()
+		shader.code = "shader_type canvas_item;\nrender_mode unshaded, blend_disabled;\n" + defs + GEN_LIB.code
+		_shaders[key] = shader
+	return _shaders[key]
+
+
 # --- parameters ----------------------------------------------------------------
 
 func _param(name: String, value: Variant) -> void:
 	gen_mat.set_shader_parameter(name, value)
-	height_mat.set_shader_parameter(name, value)
+	_dirty = true
+
+
+func _post(name: String, value: Variant) -> void:
+	post_mat.set_shader_parameter(name, value)
+	_post_frames = 1
+
+
+func _set_generator() -> void:
+	gen_mat.shader = _gen_shader()
 	_dirty = true
 
 
 func _apply_all() -> void:
-	_param("gen_type", gen_type)
-	_param("basis", basis)
 	_param("seed", float(seed_value))
 	_param("scale", tex_scale)
 	_param("octaves", octaves)
@@ -199,10 +241,8 @@ func _apply_all() -> void:
 	_param("level_lo", level_lo)
 	_param("level_hi", level_hi)
 	_param("posterize", posterize)
-	_param("normal_strength", bump)
-	_param("tex_size", float(TEX))
-	gen_mat.set_shader_parameter("view_mode", view)
-	height_mat.set_shader_parameter("view_mode", 1)
+	_post("normal_strength", bump)
+	_post("view_mode", view)
 	_apply_ramp()
 	_apply_relief()
 
@@ -224,10 +264,9 @@ func _apply_ramp() -> void:
 	g.offsets = offsets
 	g.colors = colors
 	ramp_tex.gradient = g
-	gen_mat.set_shader_parameter("ramp", ramp_tex)
+	_post("ramp", ramp_tex)
 	# The Terrain ramp's water lies flat at sea level instead of in pits
 	terrain_mat.set_shader_parameter("floor_h", 0.39 if _ramp_name() == "Terrain" and view == 0 else 0.0)
-	_dirty = true
 
 
 func _apply_relief() -> void:
@@ -252,12 +291,12 @@ func controls() -> Array:
 		{type = "section", label = "Generator"},
 		{type = "choice", label = "Type", options = TYPES, value = gen_type, on = func(i: int) -> void:
 			gen_type = i
-			_param("gen_type", i)
+			_set_generator()
 			_apply_ramp()},
 		{type = "choice", label = "Basis", options = ["Value", "Perlin", "Simplex"], value = basis,
 			on = func(i: int) -> void:
 				basis = i
-				_param("basis", i)},
+				_set_generator()},
 		{type = "slider", label = "Seed", min = 0, max = 9999, step = 1, value = seed_value, fmt = "%d",
 			on = func(v: float) -> void:
 				seed_value = int(v)
@@ -305,7 +344,7 @@ func controls() -> Array:
 		{type = "choice", label = "View", options = ["Colour", "Height", "Normal"], value = view,
 			on = func(i: int) -> void:
 				view = i
-				gen_mat.set_shader_parameter("view_mode", i)
+				_post("view_mode", i)
 				_apply_ramp()},
 		{type = "slider", label = "Contrast", min = 0.2, max = 3, step = 0.05, value = contrast, fmt = "%.2f",
 			on = func(v: float) -> void:
@@ -326,7 +365,7 @@ func controls() -> Array:
 		{type = "slider", label = "Bump", min = 0, max = 4, step = 0.05, value = bump, fmt = "%.2f",
 			on = func(v: float) -> void:
 				bump = v
-				_param("normal_strength", v)
+				_post("normal_strength", v)
 				_apply_relief()},
 		{type = "toggle", label = "Invert", value = invert, on = func(on: bool) -> void:
 			invert = on
@@ -376,7 +415,7 @@ func _set_preview(i: int) -> void:
 		pitch = -0.62
 		auto_orbit = 0.1
 	_place_camera()
-	_height_stale = true
+	_dirty = true
 	_update_filter()
 	queue_redraw()
 
@@ -392,16 +431,14 @@ func save_png() -> void:
 		return
 	_saving = true
 	var n := export_size
-	gen_vp.size = Vector2i(n, n)
-	gen_rect.size = Vector2(n, n)
-	gen_mat.set_shader_parameter("tex_size", float(n))
-	gen_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_size_passes(n)
+	height_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
+	# the output pass reads the new height on the frame after
+	out_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
-	var img := gen_vp.get_texture().get_image()
-	gen_vp.size = Vector2i(TEX, TEX)
-	gen_rect.size = Vector2(TEX, TEX)
-	gen_mat.set_shader_parameter("tex_size", float(TEX))
+	var img := out_vp.get_texture().get_image()
+	_size_passes(TEX)
 	_dirty = true
 	_saving = false
 	var file := "%s_%d_%d.png" % [TYPES[gen_type].to_lower(), seed_value, n]
@@ -413,6 +450,13 @@ func save_png() -> void:
 		var path := "user://textures/" + file
 		var err := img.save_png(path)
 		_say(("Saved " + ProjectSettings.globalize_path(path)) if err == OK else "Save failed (%d)" % err)
+
+
+func _size_passes(n: int) -> void:
+	for vp: SubViewport in [height_vp, out_vp]:
+		vp.size = Vector2i(n, n)
+	height_rect.size = Vector2(n, n)
+	out_rect.size = Vector2(n, n)
 
 
 # --- frame ---------------------------------------------------------------------
@@ -428,11 +472,12 @@ func _process(delta: float) -> void:
 		return
 	if _dirty:
 		_dirty = false
-		gen_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-		_height_stale = true
-	if _height_stale and preview >= 2:
-		_height_stale = false
 		height_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+		# this frame and the next, so the output pass surely sees the new height
+		_post_frames = 2
+	if _post_frames > 0:
+		_post_frames -= 1
+		out_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 func _update_filter() -> void:
@@ -459,7 +504,7 @@ func _draw() -> void:
 		for x in int(ceil(size.x / cell)):
 			if (x + y) % 2 == 0:
 				draw_rect(Rect2(Vector2(x, y) * cell, Vector2(cell, cell)), Color("2d2d32"))
-	var tex := gen_vp.get_texture()
+	var tex := out_vp.get_texture()
 	var s := _tile_px()
 	var n := 1 if preview == 0 else 3
 	var origin := size * 0.5 + pan - Vector2(s, s) * n * 0.5
