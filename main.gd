@@ -47,6 +47,8 @@ var SIMS := [
 		group = "VFX", color = Color("9f8cff"), script = preload("res://sims/vfx/texture_lab.gd")},
 	{title = "Particle Editor", blurb = "Layer emitters into effects, Unity / Godot style, and export them as Godot scenes.",
 		group = "VFX", color = Color("ff9f43"), script = preload("res://sims/vfx/particles.gd")},
+	{title = "Shader Lab", blurb = "Write Godot shaders live: presets, errors by line, uniforms as properties.",
+		group = "VFX", color = Color("f07ad6"), script = preload("res://sims/vfx/shader_lab.gd")},
 ]
 const GROUPS := ["Physics", "VFX"]
 
@@ -711,6 +713,9 @@ func _input(event: InputEvent) -> void:
 		if sim and active.has(event.index):
 			sim.touch_move(event.index, event.position - area.position)
 	elif event is InputEventKey and event.pressed and not event.echo:
+		var focus := get_viewport().gui_get_focus_owner()
+		if focus is LineEdit or focus is TextEdit:
+			return # the keys belong to whatever is being typed
 		match event.keycode:
 			KEY_ESCAPE:
 				if help_layer.visible:
