@@ -651,6 +651,7 @@ func open_sim(index: int) -> void:
 	sim.size = area.size
 	sim_layer.add_child(sim)
 	sim.controls_changed.connect(func() -> void: _build_controls.call_deferred())
+	sim.say.connect(func(text: String) -> void: _say(text, 6.0))
 	_build_controls()
 	_say(sim.hint(), 6.0)
 

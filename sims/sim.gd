@@ -7,6 +7,8 @@ extends Node2D
 
 ## Emit when controls() would now describe a different panel (Main rebuilds it).
 signal controls_changed
+## Emit to show a line in the status bar for a few seconds (an export's result...).
+signal say(text: String)
 
 var size := Vector2(720, 720)
 

@@ -52,6 +52,13 @@ extends Resource
 @export var material: Material
 
 static var _cache := {}
+
+
+## Forgets every built mesh (a tool that rebuilds a tree at each change would otherwise keep them all).
+static func clear_cache() -> void:
+	_cache.clear()
+
+
 ## How finely a clump is made (1: 80 faces; 0, the plain far tree: 20)
 var _detail := 1
 
