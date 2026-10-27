@@ -1,9 +1,8 @@
 shader_type spatial;
 render_mode cull_disabled;
-// A flag on a pole in the Wind sim (a PlaneMesh facing +z, x 0..length from the pole).
-// Its node is turned to point downwind; here it hangs limp in calm air, stands out as the wind
-// rises, and ripples in waves that run to the free end, faster in a stronger wind.
-
+// A flag (WindFlag's cloth: a PlaneMesh facing +z, x 0..flag_length from the pole). Its node is turned
+// to point downwind; here it hangs limp in calm air, stands out as the wind rises, and ripples in waves
+// that run to the free end, faster in a stronger wind.
 uniform float strength = 0.5; // 0 calm .. 1 a gale
 uniform float flag_length = 1.6;
 uniform vec3 colour_a : source_color = vec3(0.95, 0.42, 0.12);

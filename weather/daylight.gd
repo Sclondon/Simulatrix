@@ -1,9 +1,10 @@
+class_name Daylight
 extends RefCounted
-## Time of day, shared by the Ocean and Sky & Weather sims: for an hour 0..24 it gives the
+## Time of day (part of GameCommon's weather): for an hour 0..24 it gives the
 ## sun and moon directions, the colour and strength of the light that is up, and the sky's
-## colours. Also builds the sky material (weather_sky.gdshader) both sims draw.
+## colours. Also builds the sky material (sky.gdshader) and feeds it, the environment and a light.
 
-const SKY_SHADER := preload("res://sims/vfx/weather_sky.gdshader")
+const SKY_SHADER := preload("res://weather/sky.gdshader")
 
 # hour, zenith, horizon, light colour, light energy, ambient
 const KEYS := [

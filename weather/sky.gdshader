@@ -1,7 +1,7 @@
 shader_type sky;
-// Sky for the VFX sims: a gradient from the horizon to the zenith, a sun with a glow, a moon,
+// GameCommon weather's sky: a gradient from the horizon to the zenith, a sun with a glow, a moon,
 // stars at night, a layer of cloud projected on a plane overhead (lit from the sun, dark
-// underneath when it is thick) and a lightning flash. Colours come from weather_daylight.gd.
+// underneath when it is thick) and a lightning flash. Colours come from Daylight (daylight.gd).
 
 uniform vec3 zenith : source_color = vec3(0.13, 0.36, 0.78);
 uniform vec3 horizon : source_color = vec3(0.66, 0.8, 0.94);

@@ -1,9 +1,10 @@
 shader_type spatial;
-// The Ocean sim's sea: a sum of Gerstner waves (after Mariner's ocean, which used plain sines;
-// the horizontal push of a Gerstner wave sharpens the crests as "chop" goes up). The fold of
+// GameCommon's ocean (OceanSurface): a sum of Gerstner waves (after Mariner's ocean, which used plain
+// sines; the horizontal push of a Gerstner wave sharpens the crests as "chop" goes up). The fold of
 // the surface (the Jacobian of the push) says where crests break, and that is where the foam is.
+// Gusts darken and roughen the water in patches drifting downwind (Mariner's gust patches).
 // Shading is done by hand: sky reflection by Fresnel, the sun's glitter, light scattering through
-// thin crests, distance haze. Must match the CPU waves in ocean.gd (wave_at).
+// thin crests, distance haze. Must match the CPU waves in ocean_surface.gd (wave_at, gust_at).
 render_mode unshaded, cull_disabled;
 
 const int MAX_WAVES = 12;
@@ -35,11 +36,21 @@ uniform sampler2D detail_normal : hint_normal, repeat_enable, filter_linear_mipm
 uniform vec2 detail_offset = vec2(0.0);
 uniform float detail_strength = 0.6;
 uniform sampler2D foam_noise : repeat_enable, filter_linear_mipmap;
+uniform float gusts = 0.5;          // how strongly gust patches show (0 none)
+uniform vec2 gust_offset = vec2(0.0); // how far the gust patches have drifted downwind (m)
 
 varying vec3 world_pos;
 varying vec3 wnormal;
 varying float fold;
 varying float wave_h;
+
+// Big slow patches of stronger wind, drifting downwind (Mariner's gust_factor). Must match gust_at().
+float gust_factor(vec2 p) {
+	vec2 q = p - gust_offset;
+	float g = sin(q.x * 0.021 + q.y * 0.013) * sin(-q.x * 0.011 + q.y * 0.027 + 1.7);
+	g += 0.5 * sin(q.x * 0.043 - q.y * 0.031 + 4.0) * sin(q.x * 0.017 + q.y * 0.009);
+	return clamp(g * 0.6 + 0.45, 0.0, 1.0);
+}
 
 void vertex() {
 	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -93,7 +104,9 @@ void fragment() {
 	vec2 uv = world_pos.xz * 0.03;
 	vec3 n1 = texture(detail_normal, uv + detail_offset).xyz * 2.0 - 1.0;
 	vec3 n2 = texture(detail_normal, uv * 1.9 - detail_offset * 1.3 + 0.5).xyz * 2.0 - 1.0;
-	vec2 bump = (n1.xy + n2.xy) * detail_strength * near * 0.5;
+	// Gusts: patches where the wind is stronger, rougher (more ripple) and darker
+	float patch = smoothstep(0.55, 0.85, gust_factor(world_pos.xz)) * gusts;
+	vec2 bump = (n1.xy + n2.xy) * detail_strength * near * 0.5 * (1.0 + patch * 1.3);
 	N = normalize(N + vec3(bump.x, 0.0, bump.y));
 	if (!FRONT_FACING) N = -N;
 	vec3 L = normalize(light_dir);
@@ -113,6 +126,7 @@ void fragment() {
 	vec3 sky = mix(horizon, zenith, pow(clamp(R.y, 0.0, 1.0), 0.5));
 	float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
 	vec3 col = mix(body, sky, fres * 0.9);
+	col *= 1.0 - patch * 0.28;
 	// Sun glitter
 	float spec = pow(max(dot(R, L), 0.0), 600.0) * 18.0 + pow(max(dot(R, L), 0.0), 60.0) * 0.6;
 	col += light_color * spec * light_energy * (1.0 - overcast) * max(sun_up, 0.25);
@@ -141,6 +155,7 @@ void fragment() {
 		float band = floor(clamp(hn * 0.5 + 0.5, 0.0, 0.999) * 3.0) / 2.0;
 		col = mix(deep_color, scatter_color, band) * (ambient + light_color * light_energy * 0.6);
 		col = mix(col, horizon, step(0.5, fres) * 0.5);
+		col = mix(col, deep_color * 0.8 * (ambient + light_color * light_energy * 0.6), patch * 0.55);
 		col += light_color * step(0.6, spec) * 0.8;
 		foam = step(0.5, foam + step(0.86 - foam_amount * 0.3, hn) * step(0.5, fn2 + 0.2));
 	}

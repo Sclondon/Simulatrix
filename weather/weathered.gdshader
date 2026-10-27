@@ -1,8 +1,8 @@
 shader_type spatial;
-// For GameCommon's PineTree and LeafyTree (vertex colours, normals bent out of the crown) and the
-// rocks: sways in the wind (a leafy tree by its UV2.y, a pine by height), darkens when wet, and
-// takes snow on whatever faces up.
-
+// Things out in the weather (WeatherRig.weathered): GameCommon's PineTree and LeafyTree meshes
+// (vertex colours, normals bent out of the crown), rocks, posts... They sway in the wind (a leafy
+// tree by its UV2.y, anything else by height over `tree_height`; 0 wind for rocks), darken
+// when wet, and take snow on whatever faces up. WeatherRig.register() keeps wet, snow and wind set.
 uniform vec3 tint : source_color = vec3(1.0);
 uniform float use_uv2 = 0.0;
 uniform float tree_height = 10.0;

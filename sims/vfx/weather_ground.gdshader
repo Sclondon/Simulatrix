@@ -1,19 +1,11 @@
 shader_type spatial;
-// The Weather Lab's land: a flat meadow, rolling hills, a ring of mountains. It gets wet in rain
-// (darker, glossy, puddles that mirror the sky and ring with drops), white under settling snow,
-// and dappled by cloud shadows. The height must match terrain() in weather.gd.
+// The Weather Lab's land: a flat meadow, rolling hills, a ring of mountains, with GameCommon weather's
+// ground_weather on top (wet, puddles that mirror the sky and ring with drops, settling snow, cloud
+// shadows; WeatherRig.register keeps it set). The height must match terrain() in weather.gd.
 
-uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
-uniform float wet = 0.0;
-uniform float snow = 0.0;
-uniform float raining = 0.0;
+#include "res://weather/ground_weather.gdshaderinc"
+
 uniform float hole = 0.0;            // sink the middle (the far mesh, under the near one)
-uniform vec3 zenith : source_color = vec3(0.2, 0.4, 0.8);
-uniform vec3 horizon : source_color = vec3(0.7, 0.8, 0.9);
-uniform float shadow_amount = 0.0;
-uniform vec2 shadow_offset = vec2(0.0);
-uniform float shadow_scale = 0.00012;
-uniform float shadow_cover = 0.4;
 
 varying vec3 world;
 varying vec3 wnormal;
@@ -51,17 +43,6 @@ void vertex() {
 	world = wp + vec3(0.0, h, 0.0);
 }
 
-// Rings spreading from raindrops in a puddle: one drop a cell, each at its own moment
-float ripples(vec2 p) {
-	vec2 cell = floor(p);
-	vec2 f = fract(p);
-	float rnd = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
-	vec2 c = vec2(fract(rnd * 13.7), fract(rnd * 71.3)) * 0.6 + 0.2;
-	float t = fract(TIME * 0.9 + rnd);
-	float d = length(f - c);
-	return step(0.35, fract(rnd * 7.7)) * sin((d - t * 0.45) * 60.0) * (1.0 - smoothstep(0.0, 0.08, abs(d - t * 0.45))) * (1.0 - t);
-}
-
 void fragment() {
 	vec2 p = world.xz;
 	float dist = length(world - CAMERA_POSITION_WORLD);
@@ -78,28 +59,12 @@ void fragment() {
 	vec3 col = mix(grass, rock, clamp(smoothstep(0.18, 0.45, slope) + smoothstep(250.0, 500.0, alt), 0.0, 1.0));
 	// Snow caps on the peaks, always
 	float cap = smoothstep(600.0, 720.0, alt + n2 * 80.0) * (1.0 - smoothstep(0.3, 0.7, slope));
-	// Settling snow: thin at first, patchy, then a blanket; it sits on the flat first
-	float lie = snow * 1.25 - (n3 * 0.35 + n2 * 0.25) + (wnormal.y - 0.8) * 0.8;
-	float sn = max(cap, smoothstep(0.05, 0.25, lie));
-	// Wet: darker, and puddles in the low spots
-	float puddle = smoothstep(0.62, 0.7, wet * 0.35 + (1.0 - n2) * 0.55 + (1.0 - n3) * 0.1) * smoothstep(0.75, 0.95, wnormal.y);
-	puddle *= 1.0 - sn;
-	col *= 1.0 - wet * 0.45;
-	// Cloud shadows drifting over
-	float cs = texture(noise_tex, p * shadow_scale + shadow_offset).r;
-	float shadow = smoothstep(1.0 - shadow_cover, 1.0 - shadow_cover + 0.2, cs) * shadow_amount;
-	vec3 snow_col = vec3(0.92, 0.94, 0.98) * (0.92 + 0.08 * n3);
-	col = mix(col, snow_col, sn);
-	vec3 V = normalize(CAMERA_POSITION_WORLD - world);
-	float fres = 0.04 + 0.96 * pow(1.0 - clamp(V.y, 0.0, 1.0), 5.0);
-	float rip = 0.0;
-	if (raining > 0.0 && dist < 60.0) {
-		rip = (ripples(p * 1.3) + ripples(p * 1.3 + 0.5)) * raining * (1.0 - dist / 60.0);
-	}
-	vec3 sky = mix(horizon, zenith, clamp(V.y + rip * 0.15, 0.0, 1.0) * 0.6);
-	col = mix(col, col * 0.3, puddle);
-	ALBEDO = col * (1.0 - shadow * 0.55);
-	ROUGHNESS = mix(mix(0.95, 0.45, wet), 0.05, puddle);
-	SPECULAR = mix(0.3, 0.6, wet);
-	EMISSION = sky * puddle * (fres * 0.8 + 0.12) * (1.0 + rip * 0.6) + sky * wet * fres * 0.1 * (1.0 - sn);
+	float rough;
+	float spec;
+	vec3 emit;
+	weather_ground_cap(world, wnormal, CAMERA_POSITION_WORLD, col, n2, n3, cap, rough, spec, emit);
+	ALBEDO = col;
+	ROUGHNESS = rough;
+	SPECULAR = spec;
+	EMISSION = emit;
 }

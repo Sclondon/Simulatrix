@@ -1,8 +1,10 @@
+class_name WindDebris
 extends MultiMeshInstance3D
 ## Things the wind carries, one MultiMesh: leaves that tear off the trees in gusts, tumble
 ## downwind, settle on the ground and are lifted again by a strong gust or a blast; or seeds
 ## (thistledown) that drift light and high. Each asks the shared wind field for the air where
-## it is and is dragged towards it.
+## it is and is dragged towards it. Give it a `field` (and `crowns` for leaves); it keeps within
+## `bounds` metres of `centre` on the ground at `centre.y`. Leave the node at the origin.
 
 enum Kind { LEAF, SEED }
 
@@ -10,13 +12,16 @@ const HANGING := 0
 const FLYING := 1
 const RESTING := 2
 
-var field: RefCounted
-var kind := Kind.LEAF
-var count := 220
-## Where leaves hang: crowns as (centre, radius).
+@export var field: WindField
+@export var kind := Kind.LEAF
+@export var count := 220
+## Where leaves hang: crowns as [centre: Vector3, radius: float].
 var crowns: Array = []
-var bounds := 36.0
-var amount := 1.0 # share of the pool in use, 0..1
+@export var bounds := 36.0
+## The middle of where they go, and the ground's height.
+@export var centre := Vector3.ZERO
+## Share of the pool in use, 0..1.
+@export_range(0.0, 1.0, 0.05) var amount := 1.0
 
 var _pos := PackedVector3Array()
 var _vel := PackedVector3Array()
@@ -45,7 +50,8 @@ func _ready() -> void:
 	if kind == Kind.SEED:
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material_override = mat
-	custom_aabb = AABB(Vector3(-60, -2, -60), Vector3(120, 50, 120))
+	top_level = true
+	custom_aabb = AABB(centre + Vector3(-bounds - 20.0, -2, -bounds - 20.0), Vector3(bounds * 2.0 + 40.0, 50, bounds * 2.0 + 40.0))
 	var leaf_tints := [Color(0.85, 0.42, 0.1), Color(0.93, 0.66, 0.16), Color(0.7, 0.22, 0.1), Color(0.55, 0.6, 0.18), Color(0.95, 0.8, 0.35)]
 	for i in count:
 		_pos.append(Vector3.ZERO)
@@ -59,7 +65,7 @@ func _ready() -> void:
 		mm.set_instance_color(i, tint * _rng.randf_range(0.8, 1.1) if kind == Kind.LEAF else tint)
 		if kind == Kind.LEAF and _rng.randf() < 0.5:
 			# half of them start on the ground
-			_pos[i] = Vector3(_rng.randf_range(-bounds, bounds) * 0.6, 0.01, _rng.randf_range(-bounds, bounds) * 0.6)
+			_pos[i] = centre + Vector3(_rng.randf_range(-bounds, bounds) * 0.6, 0.01, _rng.randf_range(-bounds, bounds) * 0.6)
 			_state[i] = RESTING
 			_timer[i] = _rng.randf() * 10.0
 		else:
@@ -90,7 +96,7 @@ func _respawn(i: int) -> void:
 		var wd: Vector2 = field.dir()
 		var side := Vector2(-wd.y, wd.x) * _rng.randf_range(-bounds, bounds)
 		var start := -wd * bounds * _rng.randf_range(0.7, 1.0) + side
-		_pos[i] = Vector3(start.x, _rng.randf_range(0.3, 4.0), start.y)
+		_pos[i] = centre + Vector3(start.x, _rng.randf_range(0.3, 4.0), start.y)
 		_state[i] = FLYING
 
 
@@ -98,6 +104,7 @@ func _process(delta: float) -> void:
 	if field == null:
 		return
 	delta = minf(delta, 1.0 / 20.0)
+	field.step()
 	_frame += 1
 	var mm := multimesh
 	var live := int(count * amount)
@@ -144,15 +151,15 @@ func _process(delta: float) -> void:
 			_timer[i] += delta
 			p += v * delta
 			_vel[i] = v
-			if p.y <= 0.01:
-				p.y = 0.01
+			if p.y <= centre.y + 0.01:
+				p.y = centre.y + 0.01
 				if leaf:
 					_state[i] = RESTING
 					_timer[i] = 0.0
 				else:
 					_vel[i].y = absf(v.y) * 0.3 + 0.4
 			_pos[i] = p
-			if absf(p.x) > bounds or absf(p.z) > bounds or p.y > 30.0:
+			if absf(p.x - centre.x) > bounds or absf(p.z - centre.z) > bounds or p.y > centre.y + 30.0:
 				_respawn(i)
 				if not leaf:
 					p = _pos[i]

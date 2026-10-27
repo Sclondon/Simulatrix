@@ -1,17 +1,24 @@
+class_name WindRibbons
 extends MeshInstance3D
 ## The wind drawn the Wind Waker way (after Hemlock's Tower's WindGusts and Daughter of the
 ## Wind's wind lines): thin white ribbons whose heads ride the shared wind field, now and then
 ## curling into a loop, each leaving a tail that tapers and fades. More of them the harder it
-## blows; a blast flings them outward.
+## blows; a blast flings them outward. Give it a `field` and say where to show them (`around`,
+## or `follow_camera`). The ribbons are in world space, so leave this node at the origin.
 
 const TAIL_LIFE := 0.9
 const WIDTH := 0.05
 const MIN_STEP := 0.2
 const LOOP_TIME := 0.8
 
-var field: RefCounted
-var around := Vector3.ZERO # where to show them (the camera's focus)
-var reach := 20.0
+@export var field: WindField
+## Where to show them; with `follow_camera`, they keep round the camera instead.
+@export var around := Vector3.ZERO
+@export var follow_camera := false
+## How far round `around` they appear, m.
+@export var reach := 20.0
+## The most at once (in a strong wind).
+@export_range(1, 40) var most := 18
 var heads: Array = [] # {p, age, life, loop_at, loop_a, radius, pts}
 var _time := 0.0
 var _wait := 0.0
@@ -21,7 +28,8 @@ var _mesh := ImmediateMesh.new()
 func _ready() -> void:
 	mesh = _mesh
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	custom_aabb = AABB(Vector3(-80, -5, -80), Vector3(160, 60, 160))
+	top_level = true
+	custom_aabb = AABB(Vector3.ONE * -100000.0, Vector3.ONE * 200000.0)
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -34,10 +42,16 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if field == null:
 		return
+	field.step()
+	if follow_camera:
+		var cam := get_viewport().get_camera_3d()
+		if cam:
+			around = cam.global_position - cam.global_basis.z * reach * 0.6
+			around.y = global_position.y
 	delta = minf(delta, 1.0 / 20.0)
 	_time += delta
 	var spd: float = field.speed
-	var wanted := 0 if not visible else clampi(int(spd * 1.1), 0, 18)
+	var wanted := 0 if not visible else clampi(int(spd * 1.1), 0, most)
 	var live := 0
 	for h: Dictionary in heads:
 		if h.age < h.life:

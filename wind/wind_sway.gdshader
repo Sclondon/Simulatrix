@@ -1,10 +1,10 @@
 shader_type spatial;
 render_mode cull_disabled;
-// Trees in the Wind sim: GameCommon's LeafyTree and PineTree meshes (vertex colours, sRGB),
-// swayed by the same wind as the grass. LeafyTree says in UV2.y how much each corner sways;
-// a pine has no UV2, so `sway_by_height` sways it by height instead. The whole tree leans with
-// the gust at its foot (the grass's gust noise), the crown flutters, and blasts throw it back.
-
+// A tree (or anything tall) swaying in a WindField (WindField.sway_material() makes one and keeps it
+// set): GameCommon's LeafyTree and PineTree meshes, vertex colours (sRGB). LeafyTree says in UV2.y how
+// much each corner sways; for anything else `sway_by_height` (its height, m) sways it by height. The
+// whole tree leans with the gust at its foot (the same gust noise as WindField.gust() and GameCommon's
+// grass), the crown flutters with turbulence, and blasts throw it back.
 uniform vec2 wind_dir = vec2(1.0, 0.35);
 uniform float wind = 0.45; // as the grass's `wind`
 uniform float gust_size = 16.0;

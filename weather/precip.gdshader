@@ -4,6 +4,8 @@ shader_type spatial;
 // the eye is always full and nothing is simulated on the CPU. A raindrop is a streak along the way
 // it falls (motion blur), turned to face the camera round that line; a flake tumbles and drifts;
 // a splash is a little crown on the ground that opens and fades, then appears somewhere else.
+// Splashes sit on the ground: at `ground_y`, or on `ground_map` (a height map over `ground_rect`)
+// when one is given (WeatherRig.set_ground).
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
 
 uniform int kind = 0;               // 0 rain, 1 snow, 2 hail, 3 splash, 4 bouncing hail
@@ -14,6 +16,10 @@ uniform float width = 0.02;
 uniform float streak = 0.8;
 uniform float rate = 3.0;           // splashes: how many times a second each one goes off
 uniform vec4 tint : source_color = vec4(0.75, 0.8, 0.9, 0.35);
+uniform float ground_y = 0.0;
+uniform bool use_ground_map = false;
+uniform sampler2D ground_map : filter_linear, repeat_disable; // heights in metres (R)
+uniform vec4 ground_rect = vec4(-300.0, -300.0, 600.0, 600.0); // x, z, width, depth
 
 varying float fade;
 varying float life;
@@ -22,12 +28,10 @@ vec4 hash4(float n) {
 	return fract(sin(vec4(n, n + 1.7, n + 3.1, n + 5.3)) * vec4(43758.5453, 22578.1459, 19642.3490, 31337.1337));
 }
 
-// The land near the middle, as weather.gd's terrain() (the hills only matter far off)
+// The ground under a splash
 float terrain(vec2 p) {
-	float r = length(p);
-	float bumps = sin(p.x * 0.05) * cos(p.y * 0.043) * 0.6 + sin(p.x * 0.13 + 1.0) * sin(p.y * 0.11) * 0.2;
-	float hills = sin(p.x * 0.004) * cos(p.y * 0.0035) * 28.0 + sin(p.x * 0.011 + 1.3) * sin(p.y * 0.009 + 0.7) * 9.0;
-	return bumps + (hills + 6.0) * smoothstep(160.0, 700.0, r);
+	if (!use_ground_map) return ground_y;
+	return textureLod(ground_map, (p - ground_rect.xy) / ground_rect.zw, 0.0).r;
 }
 
 void vertex() {

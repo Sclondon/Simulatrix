@@ -1,6 +1,6 @@
 shader_type spatial;
 // One puff of cloud: a camera-facing disc shaded as if it were a sphere, its edge eaten into by
-// drifting noise so it goes wispy. Clouds are heaps of these (weather.gd sorts them back to front).
+// drifting noise so it goes wispy. Clouds are heaps of these (WeatherRig sorts them back to front).
 // Per puff, INSTANCE_CUSTOM: x how high in its cloud (0 base, 1 top), y how dark its belly gets
 // (storms), z a seed, w how squashed (1 round, less flat).
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
