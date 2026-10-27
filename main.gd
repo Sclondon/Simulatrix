@@ -23,6 +23,8 @@ var SIMS := [
 		color = Color("c38bff"), script = preload("res://sims/optics.gd")},
 	{title = "Charge Field", blurb = "Coulomb field, contours and field lines.", group = "Physics",
 		color = Color("ff6b6b"), script = preload("res://sims/field.gd")},
+	{title = "Orbits 3D", blurb = "Launch satellites round Atlas's Earth and Moon by hand.", group = "Physics",
+		color = Color("5fd7ff"), script = preload("res://sims/orbits3d.gd")},
 	{title = "Pond", blurb = "Stones, splashes and wakes in clear water.", group = "VFX",
 		color = Color("4fc3d9"), script = preload("res://sims/vfx/pond.gd")},
 	{title = "Fire", blurb = "Candle to bonfire, any colour, lit at night.", group = "VFX",
