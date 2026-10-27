@@ -3,7 +3,7 @@ extends Control
 ## docks to the right in landscape and along the bottom in portrait. The UI is built
 ## in code; each sim describes its own controls (see sims/sim.gd).
 
-const SIMS := [
+var SIMS := [
 	{title = "Playground", blurb = "Drop, pour and fling a pile of shapes.",
 		color = Color("ff5fa2"), script = preload("res://sims/playground.gd")},
 	{title = "Chaos Pendulum", blurb = "A double pendulum that never swings the same way twice.",
