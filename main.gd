@@ -489,7 +489,7 @@ func _slider_row(spec: Dictionary) -> Control:
 	name_label.text = spec.label
 	name_label.clip_text = true
 	name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_label.size_flags_stretch_ratio = 0.95
+	name_label.size_flags_stretch_ratio = 1.2
 	row.add_child(name_label)
 	var holder := Control.new()
 	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
