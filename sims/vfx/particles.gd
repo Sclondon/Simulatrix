@@ -1104,7 +1104,8 @@ func _copy_json() -> void:
 
 
 func _paste_json() -> void:
-	var data: Variant = JSON.parse_string(DisplayServer.clipboard_get())
+	var json := JSON.new() # an instance, so text that isn't JSON doesn't log an error
+	var data: Variant = json.data if json.parse(DisplayServer.clipboard_get()) == OK else null
 	if not data is Dictionary or not data.has("emitters"):
 		_say("The clipboard has no effect JSON in it")
 		return
