@@ -9,6 +9,7 @@ extends Sim3D
 const DIR := "res://sims/vfx/shader_lab/"
 ## Uniforms the lab fills in itself; they never show as properties.
 const AUTO := ["resolution", "mouse", "since_poke"]
+const Sprites := preload("res://sims/vfx/particles/textures.gd")
 const PRESETS := [
 	{name = "Plasma", file = "plasma"},
 	{name = "Metaballs", file = "metaballs"},
@@ -26,6 +27,7 @@ const PRESETS := [
 	{name = "Rock", file = "triplanar_rock", mesh = 1},
 	{name = "Ghost", file = "ghost", mesh = 0},
 	{name = "Jelly", file = "jelly", mesh = 0},
+	{name = "Sprite scroll", file = "sprite_scroll"},
 ]
 const MESHES := ["Sphere", "Cube", "Torus", "Plane", "Cylinder"]
 const NEW_2D := """shader_type canvas_item;
@@ -177,7 +179,8 @@ func help() -> String:
 		+ "after you stop typing (Ctrl+Enter compiles now, Ctrl+S saves). If it doesn't compile, the error and its line "
 		+ "show under the code and the last good shader keeps running.\n\n"
 		+ "Uniforms become properties: float and int with hint_range(min, max) are sliders, bool is a check box, and "
-		+ "vec3/vec4 with source_color is a colour. group_uniforms Name; starts a new section.\n\n"
+		+ "vec3/vec4 with source_color is a colour, and sampler2D is a picture: a built-in noise or sprite, one you draw "
+		+ "(+ Draw) or an image you import (+ Import). group_uniforms Name; starts a new section.\n\n"
 		+ "shader_type canvas_item draws over the whole preview: UV is 0..1, and the lab fills in resolution (pixels), "
 		+ "mouse (the UV under your finger) and since_poke (seconds since you tapped). shader_type spatial goes on a mesh: "
 		+ "pick it under Preview; drag to orbit, pinch or scroll to zoom, tap to set since_poke.\n\n"
@@ -277,6 +280,9 @@ func _uniform_control(u: Dictionary) -> Dictionary:
 	var uname: String = u.name
 	var label := uname.capitalize()
 	match u.kind:
+		"texture":
+			return ShapePad.picker_controls(label, values[uname], func(id: String) -> void: _set_value(uname, id),
+				picture_builtins())[0]
 		"bool":
 			return {type = "toggle", label = label, value = values[uname], on = func(on: bool) -> void: _set_value(uname, on)}
 		"color":
@@ -509,6 +515,13 @@ func _parse_uniforms(src: String) -> void:
 				u.max = r.get_string(2).to_float() if r else maxf(1.0, dflt * 2.0)
 				u.step = r.get_string(3).to_float() if r and r.get_string(3) != "" else maxf((u.max - u.min) / 500.0, 0.0001)
 				u.default = clampf(dflt, u.min, u.max) if init.is_valid_float() else u.min
+			"sampler2D":
+				# the screen and depth come from the renderer, not from a picture
+				if hints.contains("hint_screen_texture") or hints.contains("hint_depth_texture") \
+						or hints.contains("hint_normal_roughness_texture"):
+					continue
+				u.kind = "texture"
+				u.default = "noise:perlin" if uname.to_lower().contains("noise") else "sprite:leaf_maple"
 			"vec3", "vec4":
 				if not hints.contains("source_color"):
 					continue
@@ -548,12 +561,75 @@ func _parse_color(init: String, alpha: bool) -> Color:
 
 func _set_value(uname: String, v: Variant) -> void:
 	values[uname] = v
-	live_mat.set_shader_parameter(uname, v)
+	live_mat.set_shader_parameter(uname, _uniform_value(v))
+
+
+## What a uniform is set to: the value itself, or for a sampler2D (whose value is a picture's id)
+## the texture.
+static func _uniform_value(v: Variant) -> Variant:
+	return picture(v) if v is String else v
+
+
+const NOISES := ["perlin", "simplex", "cells", "value", "fbm", "ridged"]
+const NOISE_LABELS := ["Perlin", "Simplex", "Cells", "Value", "FBM", "Ridged"]
+static var _noises := {}
+
+
+## A picture for a sampler2D uniform by id: "" none (the shader's default), "noise:<kind>" a
+## built-in seamless noise, "sprite:<name>" a particle sprite, "user:<name>" one drawn or imported.
+static func picture(id: String) -> Texture2D:
+	if id == "":
+		return null
+	if id.begins_with("noise:"):
+		var kind := id.trim_prefix("noise:")
+		if not _noises.has(kind):
+			var n := FastNoiseLite.new()
+			n.seed = 7
+			n.frequency = 0.012
+			n.fractal_type = FastNoiseLite.FRACTAL_NONE
+			match kind:
+				"simplex": n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+				"cells":
+					n.noise_type = FastNoiseLite.TYPE_CELLULAR
+					n.cellular_return_type = FastNoiseLite.RETURN_DISTANCE
+				"value": n.noise_type = FastNoiseLite.TYPE_VALUE_CUBIC
+				"fbm":
+					n.noise_type = FastNoiseLite.TYPE_PERLIN
+					n.fractal_type = FastNoiseLite.FRACTAL_FBM
+					n.fractal_octaves = 5
+				"ridged":
+					n.noise_type = FastNoiseLite.TYPE_PERLIN
+					n.fractal_type = FastNoiseLite.FRACTAL_RIDGED
+					n.fractal_octaves = 5
+				_: n.noise_type = FastNoiseLite.TYPE_PERLIN
+			var t := NoiseTexture2D.new()
+			t.width = 256
+			t.height = 256
+			t.seamless = true
+			t.generate_mipmaps = true
+			t.noise = n
+			_noises[kind] = t
+		return _noises[kind]
+	if id.begins_with("sprite:"):
+		var name := id.trim_prefix("sprite:")
+		return Sprites.get_texture(name if name in Sprites.NAMES else "soft")
+	return ShapeStore.texture(id)
+
+
+## The pictures a sampler2D uniform can pick besides the user's own: none, the noises, the sprites.
+static func picture_builtins() -> Array:
+	var out := [{id = "", label = "None", tex = null}]
+	for i in NOISES.size():
+		out.append({id = "noise:" + NOISES[i], label = NOISE_LABELS[i], tex = picture("noise:" + NOISES[i])})
+	for i in Sprites.NAMES.size():
+		out.append({id = "sprite:" + Sprites.NAMES[i], label = Sprites.LABELS[i],
+			tex = Sprites.get_texture(Sprites.NAMES[i])})
+	return out
 
 
 func _apply_values() -> void:
 	for u: Dictionary in uniforms:
-		live_mat.set_shader_parameter(u.name, values[u.name])
+		live_mat.set_shader_parameter(u.name, _uniform_value(values[u.name]))
 	live_mat.set_shader_parameter("resolution", preview.size.max(Vector2.ONE))
 	live_mat.set_shader_parameter("mouse", mouse_uv)
 	live_mat.set_shader_parameter("since_poke", since_poke)
@@ -655,7 +731,7 @@ func _export(asset_name: String) -> void:
 	mat.shader = Shader.new()
 	mat.shader.code = live_mat.shader.code
 	for u: Dictionary in uniforms:
-		mat.set_shader_parameter(u.name, values[u.name])
+		mat.set_shader_parameter(u.name, _uniform_value(values[u.name]))
 	var target := "a CanvasItem (Sprite2D, ColorRect, TextureRect...)" if mode == "canvas_item" \
 		else "a MeshInstance3D (material_override, or a surface's material)"
 	var use := "# %s shader, for %s\n" % [mode, target]

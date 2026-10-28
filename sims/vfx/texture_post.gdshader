@@ -1,12 +1,15 @@
 shader_type canvas_item;
 render_mode unshaded, blend_disabled;
 // Texture Lab's output pass: colours the packed height the generator pass made
-// (texture_gen.gdshaderinc) through the ramp, or shows it as grey height or as a
-// normal map from neighbouring texels. Cheap and fixed, so changing the ramp or the
-// view never touches the generator.
+// (texture_gen.gdshaderinc, then texture_stamp.gdshader) through the ramp, or shows it as grey
+// height or as a normal map from neighbouring texels. Cheap and fixed, so changing the ramp or
+// the view never touches the generator. With base_colour, a picture's own colours (an imported
+// photo used as the base) show instead of the ramp's.
 
 uniform sampler2D height_tex : filter_nearest, repeat_enable;
 uniform sampler2D ramp : filter_linear, repeat_disable;
+uniform sampler2D base_tex : source_color, filter_linear, repeat_enable;
+uniform bool base_colour = false;
 uniform int view_mode = 0; // 0 colour, 1 height, 2 normal map
 uniform float normal_strength = 1.0;
 
@@ -28,6 +31,11 @@ void fragment() {
 		vec3 n = normalize(vec3((h - hx) * s, (h - hy) * s, 1.0));
 		COLOR = vec4(n * 0.5 + 0.5, 1.0);
 	} else {
-		COLOR = vec4(texture(ramp, vec2(h, 0.5)).rgb, 1.0);
+		vec3 c = texture(ramp, vec2(h, 0.5)).rgb;
+		if (base_colour) {
+			vec4 b = texture(base_tex, UV);
+			c = mix(c, b.rgb, b.a);
+		}
+		COLOR = vec4(c, 1.0);
 	}
 }

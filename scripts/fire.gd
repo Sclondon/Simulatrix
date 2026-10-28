@@ -42,6 +42,16 @@ extends Node3D
 @export var embers := true
 @export var smoke := true
 
+@export_group("Sprites")
+## Pictures to draw the sparks and the puffs of smoke with, instead of their own
+## shapes (none: a spark is a small diamond, a puff a ragged cloud). A picture's
+## alpha is the shape and its colour is multiplied in, so a white one takes the
+## fire's colours: an ember, a leaf, a star.
+@export var spark_texture: Texture2D: set = _set_spark_texture
+@export var smoke_texture: Texture2D: set = _set_smoke_texture
+## How big the sparks are, as a multiple of their own size (a picture may want them bigger).
+@export var spark_size := 1.0
+
 @export_group("Light")
 @export var light := true: set = _set_light
 @export var light_energy := 2.4
@@ -165,6 +175,11 @@ uniform vec3 hot : source_color = vec3(1.0, 0.94, 0.62);
 uniform vec3 soot : source_color = vec3(0.2, 0.18, 0.17);
 uniform float intensity = 1.0;
 uniform float thickness = 0.22;
+// Pictures for the sparks and the smoke, used when the matching flag is above a half.
+uniform sampler2D spark_tex : source_color, filter_linear_mipmap;
+uniform sampler2D smoke_tex : source_color, filter_linear_mipmap;
+uniform float spark_pic = 0.0;
+uniform float smoke_pic = 0.0;
 
 varying float age;
 varying float seed;
@@ -191,8 +206,14 @@ void fragment() {
 	if (kind < 0.5) {
 		// A spark: a diamond, pale while it is new, then orange, then gone.
 		float fleck = cut(1.0 - (abs(at.x) + abs(at.y)), 0.0);
+		vec3 shade = vec3(1.0);
+		if (spark_pic > 0.5) {
+			vec4 pic = texture(spark_tex, UV);
+			fleck = pic.a;
+			shade = pic.rgb;
+		}
 		ALBEDO = vec3(0.0);
-		EMISSION = mix(hot, spark, smoothstep(0.0, 0.4, age)) * intensity * (1.0 - smoothstep(0.6, 1.0, age) * 0.6);
+		EMISSION = mix(hot, spark, smoothstep(0.0, 0.4, age)) * shade * intensity * (1.0 - smoothstep(0.6, 1.0, age) * 0.6);
 		ALPHA = fleck * (1.0 - smoothstep(0.75, 1.0, age));
 	} else {
 		float around = atan(at.y, at.x);
@@ -200,6 +221,11 @@ void fragment() {
 		float from_middle = length(at) / rim;
 		float cloud = cut(1.0 - from_middle, 0.0);
 		ALBEDO = soot * mix(0.7, 1.0, cut(at.y - at.x * 0.4 + 0.25, 0.0));
+		if (smoke_pic > 0.5) {
+			vec4 pic = texture(smoke_tex, UV);
+			cloud = pic.a;
+			ALBEDO *= pic.rgb;
+		}
 		// (lit a little from below by the fire while it is new)
 		EMISSION = spark * 0.12 * intensity * (1.0 - smoothstep(0.0, 0.3, age));
 		ALPHA = cloud * thickness * smoothstep(0.0, 0.15, age) * (1.0 - smoothstep(0.35, 1.0, age));
@@ -379,6 +405,10 @@ func _dress() -> void:
 	_mote_material.set_shader_parameter(&"spark", body)
 	_mote_material.set_shader_parameter(&"hot", core)
 	_mote_material.set_shader_parameter(&"intensity", intensity)
+	_mote_material.set_shader_parameter(&"spark_tex", spark_texture)
+	_mote_material.set_shader_parameter(&"spark_pic", 1.0 if spark_texture else 0.0)
+	_mote_material.set_shader_parameter(&"smoke_tex", smoke_texture)
+	_mote_material.set_shader_parameter(&"smoke_pic", 1.0 if smoke_texture else 0.0)
 	if _lamp:
 		# (the colour of the body of the flame, a little towards its core)
 		_lamp.light_color = body.lerp(core, 0.3)
@@ -397,7 +427,7 @@ func _move_motes(delta: float) -> void:
 			_spark_due = randf_range(0.5, 1.5) * 0.28 / sqrt(size)
 			var out := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
 			_emit(top + out * foot * 0.3, out * 0.25 * sqrt(size) + Vector3.UP * randf_range(1.0, 2.2) * sqrt(size),
-					randf_range(0.012, 0.024) * (0.6 + 0.7 * sqrt(size)), randf_range(0.7, 1.5), 0.0)
+					randf_range(0.012, 0.024) * (0.6 + 0.7 * sqrt(size)) * spark_size, randf_range(0.7, 1.5), 0.0)
 	if smoke and size >= 0.15:
 		_smoke_due -= delta
 		if _smoke_due <= 0.0:
@@ -507,4 +537,12 @@ func _set_light_shadows(value: bool) -> void:
 
 func _set_light_offset(value: Vector3) -> void:
 	light_offset = value
+	_dress()
+
+func _set_spark_texture(value: Texture2D) -> void:
+	spark_texture = value
+	_dress()
+
+func _set_smoke_texture(value: Texture2D) -> void:
+	smoke_texture = value
 	_dress()

@@ -13,6 +13,8 @@ var SIMS := [
 		color = Color("7aa2ff"), script = preload("res://sims/pendulum.gd")},
 	{title = "Cloth", blurb = "Verlet cloth that billows, cuts and tears.",
 		color = Color("3de0c4"), script = preload("res://sims/cloth.gd")},
+	{title = "Rope Lab", blurb = "Kelp, vines, bouncy wires and ropes on one rope system.",
+		color = Color("5fcf8f"), script = preload("res://sims/vfx/ropes.gd")},
 	{title = "Gravity Well", blurb = "Inverse-square orbits, merging collisions.",
 		color = Color("ffd166"), script = preload("res://sims/orbits.gd")},
 	{title = "Orbits 3D", blurb = "Launch satellites round Atlas's Earth and Moon by hand.",
@@ -25,12 +27,20 @@ var SIMS := [
 		color = Color("5ec8ff"), script = preload("res://sims/waves.gd")},
 	{title = "Fluid", blurb = "Particle fluid drawn as metaballs.",
 		color = Color("4aa8ff"), script = preload("res://sims/fluid.gd")},
+	{title = "Boids", blurb = "Flocks, schools and herds with every rule a slider.",
+		color = Color("d9a3ff"), script = preload("res://sims/vfx/boids.gd")},
 	{title = "Pond", blurb = "Stones, splashes and wakes in clear water.",
 		color = Color("4fc3d9"), script = preload("res://sims/vfx/pond.gd")},
 	{title = "Ocean", blurb = "Wind-driven Gerstner sea with whitecaps and things that float.",
 		color = Color("3a8fd8"), script = preload("res://sims/vfx/ocean.gd")},
-	{title = "Weather Lab", blurb = "Shape clouds, make rain, snow, hail and lightning.",
+	{title = "Cloud Lab", blurb = "Shape clouds and light them, from the grid or from above.",
 		color = Color("9fb4d8"), script = preload("res://sims/vfx/weather.gd")},
+	{title = "Rain", blurb = "Drops, splashes and puddles on the grid.",
+		color = Color("6f8fb8"), script = preload("res://sims/vfx/weather_rain.gd")},
+	{title = "Snow", blurb = "Flakes and hail, and snow settling on things.",
+		color = Color("dfe8f5"), script = preload("res://sims/vfx/weather_snow.gd")},
+	{title = "Lightning", blurb = "Strike the grid; shape the bolt, the flash and the thunder.",
+		color = Color("b49cff"), script = preload("res://sims/vfx/weather_lightning.gd")},
 	{title = "Wind", blurb = "One wind field moving grass, trees, leaves and a flag.",
 		color = Color("b8e0ff"), script = preload("res://sims/vfx/wind.gd")},
 	{title = "Grass", blurb = "Real 3D blades: part them, roll a ball through, blast them flat.",
@@ -653,6 +663,7 @@ func open_sim(index: int) -> void:
 	sim.controls_changed.connect(func() -> void: _build_controls.call_deferred())
 	sim.say.connect(func(text: String) -> void: _say(text, 6.0))
 	_build_controls()
+	panel_scroll.scroll_vertical = 0
 	_say(sim.hint(), 6.0)
 
 

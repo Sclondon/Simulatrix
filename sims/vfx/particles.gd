@@ -65,6 +65,9 @@ func help() -> String:
 		+ "damping, swirl, turbulence, an attractor), Size and Color over life (drag the curve and gradient: "
 		+ "tap to add a point or stop, hold one to delete it), Rotation and Renderer (sprite, billboard, "
 		+ "stretched or flat, additive or alpha, a light).\n\n"
+		+ "Sprite: the built-in shapes, or Custom: + Draw opens a pad to draw your own with a finger (draw round "
+		+ "an outline and it fills; Mirror draws both halves, so half a leaf makes a leaf), + Import makes one from "
+		+ "a picture. Drawn sprites are white masks the particle colour tints; they go inside exports.\n\n"
 		+ "Burst emitters fire together every Cycle seconds, each after its Delay. Sub-emitter: when this "
 		+ "emitter's particles die they set off another emitter where they died (fireworks).\n\n"
 		+ "Library: Save keeps effects on this device; Copy and Paste move them as JSON.\n\n"
@@ -317,7 +320,7 @@ func apply(i: int) -> void:
 		if not r.tm:
 			r.tm = ShaderMaterial.new()
 		r.tm.shader = _tumble_shader(e.blend == "add")
-		r.tm.set_shader_parameter("tex", Tex.get_texture(e.tex))
+		r.tm.set_shader_parameter("tex", sprite(e.tex))
 		r.tm.set_shader_parameter("intensity", e.intensity)
 		r.tm.set_shader_parameter("tumble", e.tumble)
 		q.material = r.tm
@@ -422,10 +425,32 @@ void fragment() {
 	return _tumble_shaders[add]
 
 
+## The texture for a sprite id: one of the built-in sprites, or a custom one drawn or imported on
+## the shape pad ("user:<name>", see ui/shape_store.gd). A custom one missing on this device is Soft.
+static func sprite(id: String) -> Texture2D:
+	var t := ShapePad.texture(id, func(n: String) -> Texture2D:
+		return Tex.get_texture(n if n in Tex.NAMES else "soft"))
+	return t if t else Tex.get_texture("soft")
+
+
+## The custom sprites the effect uses, to carry inside its JSON (see ShapeStore.pack).
+func _packed_sprites() -> Dictionary:
+	return ShapeStore.pack(fx.emitters.map(func(e: Dictionary) -> String: return String(e.tex)))
+
+
+## The effect as JSON, with any custom sprites it uses inside it (so it loads on another device).
+func effect_json() -> String:
+	var out: Dictionary = fx.duplicate(true)
+	var packed := _packed_sprites()
+	if not packed.is_empty():
+		out.sprites = packed
+	return JSON.stringify(out, "  ")
+
+
 func _style(dm: StandardMaterial3D, e: Dictionary) -> void:
 	dm.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL if e.lit else BaseMaterial3D.SHADING_MODE_UNSHADED
 	dm.vertex_color_use_as_albedo = true
-	dm.albedo_texture = Tex.get_texture(e.tex)
+	dm.albedo_texture = sprite(e.tex)
 	dm.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	dm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if e.blend == "add" else BaseMaterial3D.BLEND_MODE_MIX
@@ -825,8 +850,10 @@ func controls() -> Array:
 		_slider("Spin random", "spin_rand", 0.0, 720.0, 5.0, "%d", "°/s"),
 
 		{type = "section", label = "Renderer"},
-		{type = "choice", label = "Sprite", options = Tex.LABELS, value = maxi(Tex.NAMES.find(e.tex), 0),
-			on = func(k: int) -> void: _put("tex", Tex.NAMES[k])},
+	])
+	c.append_array(ShapePad.picker_controls("Sprite", e.tex, func(id: String) -> void: _put("tex", id),
+		ShapePad.builtins(Tex.NAMES, Tex.LABELS, Tex.get_texture)))
+	c.append_array([
 		{type = "choice", label = "Mode", options = MODE_LABELS, value = maxi(MODES.find(e.mode), 0),
 			on = func(k: int) -> void: _put("mode", MODES[k])},
 		_slider("Stretch", "stretch", 1.0, 20.0, 0.1, "%.1f", "x"),
@@ -1111,6 +1138,7 @@ func _after_list_change(new_sel: int) -> void:
 # --- save, load, copy, export -----------------------------------------------
 
 func _sanitize(src: Dictionary) -> Dictionary:
+	ShapeStore.unpack(src.get("sprites")) # custom sprites carried in the JSON, if this device lacks them
 	var out := {name = String(src.get("name", "Untitled")), loop = bool(src.get("loop", true)),
 		speed = clampf(float(src.get("speed", 1.0)), 0.1, 3.0), cycle = clampf(float(src.get("cycle", 3.0)), 0.5, 10.0),
 		view = [5.5, 1.0], emitters = []}
@@ -1149,13 +1177,16 @@ func _write_library() -> void:
 
 func _save_effect() -> void:
 	_library[fx.name] = fx.duplicate(true)
+	var packed := _packed_sprites()
+	if not packed.is_empty():
+		_library[fx.name].sprites = packed
 	_write_library()
 	_say("Saved %s (%d in your library)" % [fx.name, _library.size()])
 	controls_changed.emit()
 
 
 func _copy_json() -> void:
-	DisplayServer.clipboard_set(JSON.stringify(fx, "  "))
+	DisplayServer.clipboard_set(effect_json())
 	_say("Copied %s as JSON" % fx.name)
 
 
@@ -1173,10 +1204,16 @@ func _paste_json() -> void:
 func _export(asset_name: String) -> void:
 	var scene := effect_scene()
 	var file := Exporter.slug(asset_name)
-	_say(Exporter.save("effects", asset_name, {"tscn": scene, "json": JSON.stringify(fx, "  ")}, [],
-		"var fx := (load(\"res://assets/effects/%s.tscn\") as PackedScene).instantiate()\nadd_child(fx)\n" % file
-		+ "# one-shot effects: set each GPUParticles3D's emitting = true to fire it again",
-		"Particle Editor"))
+	var files := {"tscn": scene, "json": effect_json()}
+	var use := "var fx := (load(\"res://assets/effects/%s.tscn\") as PackedScene).instantiate()\nadd_child(fx)\n" % file
+	use += "# one-shot effects: set each GPUParticles3D's emitting = true to fire it again"
+	# custom sprites are inside the scene; their PNGs go beside it too, to use elsewhere
+	var customs := _packed_sprites()
+	for id: String in customs:
+		files["sprite_%s.png" % ShapeStore.name_of(id)] = Marshalls.base64_to_raw(customs[id])
+	if not customs.is_empty():
+		use += "\n# its drawn sprites are inside the scene; %s.sprite_*.png are the same pictures" % file
+	_say(Exporter.save("effects", asset_name, files, [], use, "Particle Editor"))
 	scene.free()
 
 

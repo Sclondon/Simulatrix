@@ -61,9 +61,9 @@ func _first(node: Node, test: Callable) -> Control:
 func _run() -> void:
 	await _frames(5)
 	_check(main.compact, "phone size turns on compact mode (scale %.2f)" % main.get_window().content_scale_factor)
-	# Weather Lab: a long panel of choices and value bars
+	# Cloud Lab: a long panel of choices and value bars
 	for i in main.SIMS.size():
-		if main.SIMS[i].title == "Weather Lab":
+		if main.SIMS[i].title == "Cloud Lab":
 			main.open_sim(i)
 	await _frames(20)
 	var scroll: ScrollContainer = main.panel_scroll

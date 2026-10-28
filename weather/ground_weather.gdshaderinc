@@ -7,7 +7,7 @@
 //     float rough; float spec; vec3 emit;
 //     weather_ground(world, wnormal, CAMERA_POSITION_WORLD, col, n2, n3, rough, spec, emit); // n2, n3: 0..1 noise, coarse, fine
 //     ALBEDO = col; ROUGHNESS = rough; SPECULAR = spec; EMISSION = emit;
-// See weather/ground.gdshader for a whole ground, and the Simulatrix's Weather Lab for hills.
+// See weather/ground.gdshader for a whole ground; the Simulatrix's weather labs use it on an editor grid.
 
 uniform sampler2D noise_tex : repeat_enable, filter_linear_mipmap;
 uniform float wet = 0.0;
@@ -19,6 +19,7 @@ uniform float shadow_amount = 0.0;
 uniform vec2 shadow_offset = vec2(0.0);
 uniform float shadow_scale = 0.00012;
 uniform float shadow_cover = 0.4;
+uniform float puddles = 1.0;         // how much of the wet gathers into puddles (0 none, 1 as made, 2 a lot)
 
 
 // Rings spreading from raindrops in a puddle: one drop a cell, each at its own moment
@@ -41,7 +42,7 @@ void weather_ground_cap(vec3 world, vec3 wnormal, vec3 cam, inout vec3 col, floa
 	float lie = snow * 1.25 - (n3 * 0.35 + n2 * 0.25) + (wnormal.y - 0.8) * 0.8;
 	float sn = max(cap, smoothstep(0.05, 0.25, lie));
 	// Wet: darker, and puddles in the low spots
-	float puddle = smoothstep(0.62, 0.7, wet * 0.35 + (1.0 - n2) * 0.55 + (1.0 - n3) * 0.1) * smoothstep(0.75, 0.95, wnormal.y);
+	float puddle = smoothstep(0.62, 0.7, wet * 0.35 + (1.0 - n2) * 0.55 + (1.0 - n3) * 0.1 + (puddles - 1.0) * 0.3 * wet) * min(puddles * 4.0, 1.0) * smoothstep(0.75, 0.95, wnormal.y);
 	puddle *= 1.0 - sn;
 	col *= 1.0 - wet * 0.45;
 	// Cloud shadows drifting over

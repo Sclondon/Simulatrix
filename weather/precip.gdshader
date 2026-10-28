@@ -14,12 +14,15 @@ uniform float speed = 9.0;          // m/s along fall_dir
 uniform vec3 box = vec3(36.0, 36.0, 36.0);
 uniform float width = 0.02;
 uniform float streak = 0.8;
+uniform float flutter = 1.0;        // snow: how much flakes sway and drift (1: as made)
 uniform float rate = 3.0;           // splashes: how many times a second each one goes off
 uniform vec4 tint : source_color = vec4(0.75, 0.8, 0.9, 0.35);
 uniform float ground_y = 0.0;
 uniform bool use_ground_map = false;
 uniform sampler2D ground_map : filter_linear, repeat_disable; // heights in metres (R)
 uniform vec4 ground_rect = vec4(-300.0, -300.0, 600.0, 600.0); // x, z, width, depth
+uniform bool use_sprite = false;    // draw each drop, flake or splash as this sprite instead (white in alpha: tinted)
+uniform sampler2D sprite_tex : source_color, filter_linear_mipmap, repeat_disable;
 
 varying float fade;
 varying float life;
@@ -57,8 +60,8 @@ void vertex() {
 		vec3 p = h.xyz * box + fall_dir * speed * TIME;
 		o = cam + mod(p - cam + box * 0.5, box) - box * 0.5;
 		if (kind == 1) {
-			o.xz += vec2(sin(TIME * 1.3 + id * 1.37), cos(TIME * 1.1 + id * 2.11)) * 0.35;
-			o.y += sin(TIME * 2.0 + id) * 0.05;
+			o.xz += vec2(sin(TIME * 1.3 + id * 1.37), cos(TIME * 1.1 + id * 2.11)) * 0.35 * flutter;
+			o.y += sin(TIME * 2.0 + id) * 0.05 * flutter;
 		}
 	}
 	vec3 to_cam = normalize(cam - o);
@@ -102,8 +105,14 @@ void fragment() {
 	} else {
 		a = 1.0 - smoothstep(0.25, 1.0, length(p));
 	}
+	vec3 col = tint.rgb;
+	if (use_sprite) {
+		vec4 s = texture(sprite_tex, UV);
+		a = s.a;
+		col *= s.rgb;
+	}
 	a *= tint.a * fade;
 	if (a < 0.01) discard;
-	ALBEDO = tint.rgb;
+	ALBEDO = col;
 	ALPHA = a;
 }

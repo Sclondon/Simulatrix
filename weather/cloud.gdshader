@@ -17,6 +17,11 @@ uniform float fade_far = 9000.0;
 uniform vec3 flash_pos = vec3(0.0);
 uniform float flash = 0.0;
 uniform float gloom = 0.0;          // storm and overcast: everything greyer and darker
+uniform float softness = 1.0;       // edges: less crisp, more misty (1: as made)
+uniform float belly = 1.0;          // how dark the undersides get
+uniform float lining = 1.0;         // thin edges glowing toward the sun
+uniform vec3 tint : source_color = vec3(1.0);
+uniform float flash_light = 1.0;    // how bright lightning lights the cloud
 
 varying vec3 world;
 varying vec4 info;
@@ -43,7 +48,7 @@ void fragment() {
 	float n = texture(noise_tex, UV * 0.55 + s + vec2(TIME * 0.003, 0.0)).r;
 	float n2 = texture(noise_tex, UV * 1.6 + s.yx - vec2(0.0, TIME * 0.005)).r;
 	float edge = 1.0 - sqrt(r2);
-	float a = smoothstep(0.0, 0.35, edge - (n * 0.6 + n2 * 0.4 - 0.5) * 0.7);
+	float a = smoothstep(0.0, 0.35 * max(softness, 0.05), edge - (n * 0.6 + n2 * 0.4 - 0.5) * 0.7 * min(softness, 1.6));
 	// Cumulus have flat bottoms: the air below the condensation level is clear
 	a *= smoothstep(base_y - 10.0, base_y + 90.0, world.y);
 	if (a < 0.02) discard;
@@ -60,19 +65,19 @@ void fragment() {
 	vec3 sun_col = mix(light_color, light_color * vec3(1.15, 0.72, 0.5), warmth) * light_energy * 1.35;
 	vec3 shade = mix(ambient, horizon, 0.35) * mix(0.75, 1.15, info.x);
 	vec3 col = mix(shade * 1.1, shade * 0.35 + sun_col, smoothstep(0.2, 0.9, lit));
-	col *= mix(1.0, 0.3, info.y * (1.0 - info.x));
+	col *= mix(1.0, 0.3, clamp(info.y * belly, 0.0, 1.4) * (1.0 - info.x));
 	col = mix(col, vec3(dot(col, vec3(0.33))) * vec3(0.9, 0.95, 1.05), gloom * 0.6) * mix(1.0, 0.6, gloom);
 	// Thin edges glow when you look toward the sun
 	vec3 V = normalize(CAMERA_POSITION_WORLD - world);
 	float toward = pow(max(dot(-V, L), 0.0), 6.0);
-	col += sun_col * toward * (1.0 - a) * 1.5 * day;
+	col += sun_col * toward * (1.0 - a) * 1.5 * lining * day;
 	// Lightning inside the cloud
 	float fd = length(world - flash_pos);
-	col += vec3(0.85, 0.85, 1.0) * flash * exp(-fd / 1400.0) * (0.6 + 0.8 * n) * 2.0;
+	col += vec3(0.85, 0.85, 1.0) * flash * flash_light * exp(-fd / 1400.0) * (0.6 + 0.8 * n) * 2.0;
 	// Distance: into the haze, then gone
 	float dist = length(world - CAMERA_POSITION_WORLD);
 	col = mix(col, horizon, smoothstep(fade_far * 0.15, fade_far, dist) * 0.75);
 	a *= 1.0 - smoothstep(fade_far * 0.8, fade_far, length(world.xz - CAMERA_POSITION_WORLD.xz));
-	ALBEDO = col;
+	ALBEDO = col * tint;
 	ALPHA = a * opacity;
 }

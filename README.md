@@ -18,29 +18,35 @@ One list, with like sims side by side.
 | Playground | Godot `RigidBody2D` shapes: tap to drop, drag to pour, grab to throw. Gravity, bounce, pegs. |
 | Chaos Pendulum | Double pendulum from the Lagrangian equations, RK4 with 8 substeps. Three "ghost" copies start 0.001 rad apart to show chaos. |
 | Cloth | Verlet points + distance constraints; links snap past a stretch limit. Grab or cut, wind, pins. |
+| Rope Lab | GameCommon `rope`: Verlet ropes drawn in the vertex shader. Kelp forest (buoyant stalks, a current, a seal to swim through), Warren-style vines (push, cut a strung vine into two), Hemlock-style bouncy telegraph wires (drop a ball, crows ride the bounce), ropes, a chain and a tyre swing. |
 | Gravity Well | Inverse-square gravity around a draggable star, optional planet-planet gravity, merging collisions, slingshot launch with a predicted path. |
 | Orbits 3D | Atlas's Earth (Blue Marble, clouds, city lights, air) and Moon on sphere meshes; real GM in Earth radii, leapfrog satellites launched by slingshot with a live predicted orbit and Pe/Ap/period readouts (`sims/orbits3d/`). |
 | Charge Field | Coulomb field of up to 12 charges: potential and contours in `field.gdshader`, field lines traced (RK2). |
 | Light Bench | 2D ray tracing: Snell's law with total internal reflection, Schlick partial reflections, Cauchy dispersion. |
 | Ripple Tank | Fragment shader summing circular waves as complex phasors: live waves or time-averaged brightness, plus a double-slit setup. |
 | Fluid | ~600 particles with Clavet-style double density relaxation (grid-binned neighbours), drawn as metaballs in a half-size SubViewport. |
+| Boids | GameCommon `flock`: separation, alignment, cohesion and a dozen more rules as sliders; starlings, fish, bats, crows, gnats, sheep, each in its own scene; goal, predator (your finger, or a hawk), obstacles; debug views of one boid's senses. |
 | Pond | GameCommon `water` in a basin: pebbles, splashes, a wake float, presets, night; or (Body: Stream) the painted-woodland kit's running water. |
 | Ocean | GameCommon `ocean`: wind-built Gerstner sea plus swell, folding whitecaps, gust patches, Toon style, things floating on the CPU copy of the waves. |
-| Weather Lab | GameCommon `weather`: clouds (cumulus, stratus, storm, cirrus), GPU rain with puddles, settling snow, hail, lightning, time of day, fog; the painted-woodland kit's sun shafts and painted sky. |
+| Cloud Lab | GameCommon `weather`: cloud types (cumulus, stratus, storm, altocumulus, cirrus), cover, puff size, density, softness, lining, tint, presets; seen from the grid, orbiting, or from above; time of day, painted sky, sun shafts. |
+| Rain | Drops, streaks, splashes; the grid and props wet, puddle and ring; custom drop and splash sprites. |
+| Snow | Flakes or hail, flutter and drift, snow settling and melting on the grid and props; custom flake sprites. |
+| Lightning | Strike the grid (tap) or let a storm run: bolt branching, jaggedness, glow, colour, return strokes, in-cloud sheet lightning, the flash lighting the scene, thunder delay. |
 | Wind | GameCommon `wind`: one wind field moving grass, swaying trees, leaves and seeds, ribbons, a flag; vector view and blasts. |
 | Grass | GameCommon `grass`: finger pusher with trails, a rolling ball, `Grass.blast()`, palettes, quality. |
-| Tree Lab | GameCommon `pine-tree` and `leafy-tree` (drawn by their own materials) with every setting as a slider, seed, debug views, forest mode; the painted-woodland kit's painted trees and bushes; a leaf-litter ground. |
+| Tree Lab | GameCommon `tree` (`TreeGen`): one recursive generator for every species. Trunk, branching (levels, children, angles, golden-angle roll, length and radius ratios, apical dominance, gravitropism, droop, weep, curl, Weber-Penn crown shapes) and leaves drawn as Blobs, Fluffy cards (part-billboarded alpha-cut clusters with crown normals), Needle cards, Painted cards or none; 15 presets from pine to willow; debug views, forest mode; painted-woodland bushes. |
 | Falling Sand | A cellular automaton (one byte per cell) sent to the GPU as an R8 texture and coloured by `sand.gdshader`. |
 | Sand | GameCommon `sand`: furrows, prints, ten kinds to paint, pour, wind, dunes. |
-| Fire | GameCommon `fire` from candle to bonfire, five colours, tap to light more. |
-| Particle Editor | Unity/Godot-style editor over `GPUParticles3D`: layered emitters, modules, curve and gradient editors, 20 presets, the kit's real leaf shapes as sprites, a Tumble mode. |
-| Texture Lab | GPU noise and material generators (Perlin, Simplex, Worley, FBM, warp, wood, marble, bricks...), ramps, seamless tiling, 3D previews. |
-| Shader Lab | Live Godot shader editor: syntax highlighting, errors by line (via `OS.add_logger`), uniforms become properties, 2D and 3D modes, 16 presets. |
+| Fire | GameCommon `fire` from candle to bonfire, five colours, tap to light more.; sparks and smoke can be any sprite. |
+| Particle Editor | Unity/Godot-style editor over `GPUParticles3D`: layered emitters, modules, curve and gradient editors, 20 presets, the kit's real leaf shapes as sprites, a Tumble mode. Any emitter can use a sprite you draw or import. |
+| Texture Lab | GPU noise and material generators (Perlin, Simplex, Worley, FBM, warp, wood, marble, bricks...), ramps, seamless tiling, 3D previews; a Stamp pass scatters or tiles a drawn or imported shape, masks with it, or starts from a photo. |
+| Shader Lab | Live Godot shader editor: syntax highlighting, errors by line (via `OS.add_logger`), uniforms become properties, 2D and 3D modes, 16 presets.; every `sampler2D` uniform gets a picker (noises, sprites, your own shapes). |
 
 ## Components and exporting
 
-- `scripts/`, `woodland/`, `creatures/`, `ocean/`, `weather/`, `wind/` are installed GameCommon components (water,
-  fire, grass, pine-tree, leafy-tree, painted-woodland, sand, fireflies, ocean, weather, wind). Keep them identical
+- `scripts/`, `woodland/`, `creatures/`, `ocean/`, `weather/`, `wind/`, `rope/`, `flock/`, `tree/` are installed GameCommon
+  components (water, fire, grass, pine-tree, leafy-tree, painted-woodland, sand, fireflies, ocean, weather, wind, rope,
+  flock, tree). Keep them identical
   to GameCommon: before working on one, compare every game's copy (some games improve theirs), pull newer general
   work back into GameCommon with its README, then `kit.sh install --force` it here.
 - Each lab's last properties section is **Export** (`sims/exporter.gd`): a name, Export, Send to project... and
@@ -50,6 +56,11 @@ One list, with like sims side by side.
   and its components into a chosen Godot project (as `sh kit.sh asset <kind>/<name> <project>` does), leaving a
   project's own changed component files alone. In a browser, Export downloads the files instead.
 - `sims/node_copy.gd` makes a fresh component node carrying only a live node's settings, for exporting scenes.
+- Shapes: `ui/shape_pad.gd` (`ShapePad`) draws a sprite with a finger or mouse (outline fill, brush, eraser, mirror,
+  soft edge, undo) in a full-screen editor, and imports PNG/JPG/WebP/SVG (a native dialog locally, a file input in a
+  browser) as a mask or in colour. `ui/shape_store.gd` keeps them as PNGs in `user://sprites/`; they show under
+  Custom in every sprite picker (`ShapePad.picker_controls(label, id, on_pick, builtins)`, `ShapePad.texture(id,
+  fallback)`), and export to the library as kind `sprites`.
 
 ## Layout
 
@@ -76,7 +87,10 @@ godot --path . -s tests/shots.gd -- --shots=C:/tmp/shots [--portrait] [--size=39
 godot --path . -s tests/vfx_shot.gd -- --sim=res://sims/vfx/ocean.gd --shots=C:/tmp/s [--portrait] [--poke]   # one sim
 godot --headless --path . -s tests/export_check.gd -- --root=C:/tmp/lib            # export a pine, send it to a project
 godot --headless --path . -s tests/export_labs.gd -- ...                           # every lab's export (see the file)
-godot --headless --path . -s tests/component_export_check.gd -- ...                # ocean, weather, wind exports
+godot --headless --path . -s tests/component_export_check.gd -- ...                # ocean, the four weather labs, wind
+godot --headless --path . -s tests/rope_export_check.gd -- --root=C:/tmp/r       # every rope scene, run in a fresh project
+godot --headless --path . -s tests/boids_check.gd -- --perf | --export=C:/tmp/b   # flock timings; every preset in a fresh project
+godot --path . -s tests/shape_pad_check.gd -- --root=C:/tmp/s                      # draw a sprite by touch, use it, export it
 godot --headless --path . --export-release Web build/index.html
 ```
 

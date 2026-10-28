@@ -12,7 +12,7 @@ extends Node3D
 ## (wet, snow, wind) are given to register(): weathered() makes one for trees and rocks,
 ## ground_material() one for the ground.
 ## Ideas from Hemlock's Tower's weather (puff clouds, lightning) and Mariner's; made in The
-## Simulatrix's Weather Lab (2026-10-27).
+## Simulatrix's weather labs (2026-10-27).
 
 signal struck(at: Vector3)
 
@@ -20,7 +20,7 @@ const CLOUD := preload("res://weather/cloud.gdshader")
 const PRECIP := preload("res://weather/precip.gdshader")
 const WEATHERED := preload("res://weather/weathered.gdshader")
 const GROUND := preload("res://weather/ground.gdshader")
-enum Clouds { CUMULUS, STRATUS, STORM, CIRRUS }
+enum Clouds { CUMULUS, STRATUS, STORM, CIRRUS, ALTOCUMULUS }
 enum Precip { NONE, RAIN, SNOW, HAIL }
 const QUALITY := [
 	{puffs = 150, rain = 1500, snow = 1500},
@@ -53,6 +53,26 @@ const SOUND := 343.0 # m/s, for the thunder
 	set(v): field = v; _clouds_dirty = true
 ## Where a storm's thunderhead stands, against this node (it stays put so it can be watched).
 @export var storm_at := Vector3(-5000, 0, -9200)
+## How big each puff is (1: as made); fewer, bigger lumps or many small ones.
+@export_range(0.3, 2.5, 0.05) var puff_size := 1.0:
+	set(v): puff_size = v; _clouds_dirty = true
+## How opaque the clouds are, 0..1.
+@export_range(0.1, 1.0, 0.05) var density := 1.0
+## How soft and wispy their edges are (1: as made; less is crisp, more is misty).
+@export_range(0.2, 3.0, 0.05) var softness := 1.0
+## How dark the bellies get (1: as made).
+@export_range(0.0, 2.0, 0.05) var belly := 1.0
+## The silver lining: thin edges glowing toward the sun (1: as made).
+@export_range(0.0, 3.0, 0.05) var lining := 1.0
+## A colour over the clouds (white: none).
+@export var cloud_tint := Color.WHITE
+## How much of the flat cloud layer painted in the sky shows with the puffs (1: as made).
+@export_range(0.0, 2.0, 0.05) var sky_layer := 1.0
+## How dark the shadows the clouds drift over the ground are (1: as made).
+@export_range(0.0, 2.0, 0.05) var cloud_shadows := 1.0
+## Another seed lays the clouds out differently.
+@export var cloud_seed := 0:
+	set(v): cloud_seed = v; _clouds_dirty = true
 
 @export_group("Precipitation")
 @export var precip := Precip.NONE:
@@ -61,12 +81,64 @@ const SOUND := 343.0 # m/s, for the thunder
 	set(v): intensity = v; _precip_dirty = true
 ## The ground gets wet and snow builds up (and both go again after).
 @export var settle := true
+## How fast the ground wets and the snow builds up (1: as made).
+@export_range(0.0, 5.0, 0.05) var settle_rate := 1.0
+## How fast wet ground dries (1: as made).
+@export_range(0.0, 5.0, 0.05) var dry_rate := 1.0
+## How fast lying snow melts (1: as made).
+@export_range(0.0, 5.0, 0.05) var melt := 1.0
+## How much of the wet ground gathers into puddles (1: as made, 0 none); registered grounds.
+@export_range(0.0, 2.0, 0.05) var puddles := 1.0
+## How fast rain, snow and hail fall (1: as made: rain ~9.5 m/s, snow ~1.1, hail ~16).
+@export_range(0.2, 3.0, 0.05) var fall_speed := 1.0:
+	set(v): fall_speed = v; _precip_dirty = true
+## Raindrops: how thick (1: as made), how long the streaks are (m) and how many splash (0 none).
+@export_range(0.2, 4.0, 0.05) var drop_size := 1.0:
+	set(v): drop_size = v; _precip_dirty = true
+@export_range(0.05, 3.0, 0.05) var rain_streak := 0.8:
+	set(v): rain_streak = v; _precip_dirty = true
+@export_range(0.0, 3.0, 0.05) var splashes := 1.0:
+	set(v): splashes = v; _precip_dirty = true
+## Snowflakes and hailstones: how big (1: as made), and how much flakes flutter and drift.
+@export_range(0.2, 4.0, 0.05) var flake_size := 1.0:
+	set(v): flake_size = v; _precip_dirty = true
+@export_range(0.0, 4.0, 0.05) var flutter := 1.0:
+	set(v): flutter = v; _precip_dirty = true
+## Sprites to draw instead of the built-in shapes (white in the alpha is tinted; empty: built in):
+## a raindrop streak (stretched along the fall, top of the picture up), a splash, a snowflake or
+## hailstone (also used for bouncing hail).
+@export var drop_texture: Texture2D:
+	set(v): drop_texture = v; _precip_dirty = true
+@export var splash_texture: Texture2D:
+	set(v): splash_texture = v; _precip_dirty = true
+@export var flake_texture: Texture2D:
+	set(v): flake_texture = v; _precip_dirty = true
 
 @export_group("Lightning")
 ## Strikes now and then by themselves.
 @export var auto_storm := false
 ## How often, 0 (now and then) .. 1 (often).
 @export_range(0.0, 1.0, 0.05) var strike_rate := 0.5
+## How far from the camera strikes land when no place is given, m (min, max).
+@export var strike_range := Vector2(450.0, 2600.0)
+## Share of strikes that stay in the cloud (sheet lightning: a flicker through the cloud base,
+## no bolt to the ground), 0..1.
+@export_range(0.0, 1.0, 0.05) var in_cloud := 0.0
+## How much a bolt forks (0.5: as made).
+@export_range(0.0, 1.0, 0.05) var branching := 0.5
+## How jagged its path is (0.16: as made).
+@export_range(0.0, 0.5, 0.01) var jaggedness := 0.16
+## How thick the bolt's core is, and how much glow round it (1: as made).
+@export_range(0.2, 4.0, 0.05) var bolt_width := 1.0
+@export_range(0.0, 3.0, 0.05) var bolt_glow := 1.0
+## The colour of the glow round the core (the core is white).
+@export var bolt_color := Color(0.55, 0.6, 1.0)
+## How long a strike lasts (1: as made, about half a second).
+@export_range(0.2, 4.0, 0.05) var bolt_time := 1.0
+## Return strokes: how many times the bolt flickers back to full brightness (2: as made).
+@export_range(1, 8) var strokes := 2
+## How brightly the flash lights the land and the clouds (1: as made).
+@export_range(0.0, 3.0, 0.05) var flash_light := 1.0
 
 @export_group("Air")
 ## Wind speed, m/s: slants the rain, drifts the clouds, sways registered trees.
@@ -125,6 +197,7 @@ var _drift := Vector2.ZERO
 var _sky_drift := Vector2.ZERO
 var _bolt_paths: Array = []
 var _bolt_t := 99.0
+var _stroke_seed := 0.0
 var _bolt_at := Vector3.ZERO
 var _thunder := -1.0
 var _thunder_km := 0.0
@@ -268,7 +341,7 @@ func _puff(cluster: int, off: Vector3, size: float, up: float, dark: float, squa
 	_p_flat.append(1 if flat else 0)
 	_p_cluster.append(cluster)
 	_p_off.append(off)
-	_p_size.append(size)
+	_p_size.append(size * puff_size)
 	_p_custom.append(Color(clampf(up, 0.0, 1.0), dark, _rng.randf(), squash))
 
 
@@ -289,7 +362,7 @@ func _make_clouds() -> void:
 	_clouds_dirty = false
 	if _cloud_mm == null:
 		return
-	_rng.seed = 100 + cloud_type
+	_rng.seed = 100 + cloud_type + cloud_seed * 7919
 	_clusters.clear()
 	_p_cluster.clear(); _p_off.clear(); _p_size.clear(); _p_custom.clear(); _p_flat.clear()
 	var cap: int = QUALITY[quality].puffs
@@ -333,7 +406,7 @@ func _make_clouds() -> void:
 			for j in int(cap * 0.08):
 				var a := _rng.randf() * TAU
 				var d := _rng.randf_range(600.0, 2600.0)
-				_puff(c, Vector3(cos(a) * d, -_rng.randf_range(80.0, 300.0), sin(a) * d), _rng.randf_range(250.0, 500.0), 0.0, 1.0, 0.6)
+				_puff(c, Vector3(cos(a) * d, -_rng.randf_range(80.0, 300.0), sin(a) * d), _rng.randf_range(350.0, 650.0), 0.0, 0.7, 0.45)
 			var left := cap - _p_off.size()
 			var heaps := roundi(cover * 14.0)
 			for i in heaps:
@@ -341,6 +414,19 @@ func _make_clouds() -> void:
 				_clusters.append(Vector3(_rng.randf_range(-field, field), y0, _rng.randf_range(-field, field)))
 				var w := _rng.randf_range(500.0, 1000.0)
 				_heap(k, w, w * 0.6 * thickness, clampi(left / maxi(heaps, 1), 4, 10), 0.6)
+		Clouds.ALTOCUMULUS: # a mackerel sky: rafts of small, flattish puffs in rows
+			var n := roundi(cover * 40.0) + 4
+			for i in n:
+				var c := _clusters.size()
+				_clusters.append(Vector3(_rng.randf_range(-field, field), y0, _rng.randf_range(-field, field)))
+				var rows := _rng.randf_range(-0.4, 0.4)
+				var per := clampi(cap / n, 4, 14)
+				for j in per:
+					var along := _rng.randf_range(-1.0, 1.0) * 1300.0
+					var across := (floorf(_rng.randf() * 4.0) - 1.5) * 330.0 + _rng.randf_range(-60.0, 60.0)
+					var off := Vector3(along * cos(rows) - across * sin(rows), _rng.randf_range(0.0, 90.0) * thickness,
+						along * sin(rows) + across * cos(rows))
+					_puff(c, off, _rng.randf_range(200.0, 340.0), _rng.randf_range(0.4, 1.0), 0.15, 0.55)
 		_: # Cirrus: only in the sky layer
 			pass
 	var n := mini(_p_off.size(), cap)
@@ -394,46 +480,54 @@ func _setup_precip() -> void:
 	var count := 0
 	match precip:
 		Precip.RAIN: # ~9 m/s streaks, slanted by the wind
-			fall = Vector3(w.x * 0.7, -9.5, w.y * 0.7)
+			fall = Vector3(w.x * 0.7, -9.5 * fall_speed, w.y * 0.7)
 			count = int(q.rain * intensity)
 			_fall_mat.set_shader_parameter("kind", 0)
-			_fall_mat.set_shader_parameter("width", 0.012)
-			_fall_mat.set_shader_parameter("streak", 0.8)
+			_fall_mat.set_shader_parameter("width", 0.012 * drop_size)
+			_fall_mat.set_shader_parameter("streak", rain_streak)
 			_fall_mat.set_shader_parameter("box", Vector3(40, 40, 40))
 			_fall_mat.set_shader_parameter("tint", Color(0.8, 0.84, 0.92, 0.6))
 		Precip.SNOW: # slow, drifting, tumbling
-			fall = Vector3(w.x * 0.45, -1.1, w.y * 0.45)
+			fall = Vector3(w.x * 0.45, -1.1 * fall_speed, w.y * 0.45)
 			count = int(q.snow * intensity)
 			_fall_mat.set_shader_parameter("kind", 1)
-			_fall_mat.set_shader_parameter("width", 0.06)
+			_fall_mat.set_shader_parameter("width", 0.06 * flake_size)
 			_fall_mat.set_shader_parameter("box", Vector3(26, 26, 26))
 			_fall_mat.set_shader_parameter("tint", Color(1, 1, 1, 0.95))
 		Precip.HAIL: # fast pellets
-			fall = Vector3(w.x * 0.4, -16.0, w.y * 0.4)
+			fall = Vector3(w.x * 0.4, -16.0 * fall_speed, w.y * 0.4)
 			count = int(q.rain * intensity * 0.35)
 			_fall_mat.set_shader_parameter("kind", 2)
-			_fall_mat.set_shader_parameter("width", 0.03)
+			_fall_mat.set_shader_parameter("width", 0.03 * flake_size)
 			_fall_mat.set_shader_parameter("box", Vector3(36, 36, 36))
 			_fall_mat.set_shader_parameter("tint", Color(0.95, 0.97, 1.0, 0.95))
 	_fall_mat.set_shader_parameter("fall_dir", fall.normalized())
 	_fall_mat.set_shader_parameter("speed", fall.length())
+	_fall_mat.set_shader_parameter("flutter", flutter)
+	_sprite(_fall_mat, drop_texture if precip == Precip.RAIN else flake_texture)
+	_sprite(_splash_mat, splash_texture if precip == Precip.RAIN else flake_texture)
 	_fall.instance_count = maxi(count, 30)
-	if precip == Precip.RAIN:
+	if precip == Precip.RAIN and splashes > 0.0:
 		# Crowns where the drops land, and rings in the puddles (the ground's shader)
 		_splash_mat.set_shader_parameter("kind", 3)
-		_splash_mat.set_shader_parameter("width", 0.12)
+		_splash_mat.set_shader_parameter("width", 0.12 * sqrt(drop_size))
 		_splash_mat.set_shader_parameter("rate", 3.5)
 		_splash_mat.set_shader_parameter("box", Vector3(30, 30, 30))
 		_splash_mat.set_shader_parameter("tint", Color(0.82, 0.86, 0.92, 0.75))
-		_splash.instance_count = maxi(int(q.rain * intensity * 0.3), 20)
-	elif precip == Precip.HAIL:
+		_splash.instance_count = maxi(int(q.rain * intensity * 0.3 * splashes), 20)
+	elif precip == Precip.HAIL and splashes > 0.0:
 		# Hailstones bouncing
 		_splash_mat.set_shader_parameter("kind", 4)
-		_splash_mat.set_shader_parameter("width", 0.03)
+		_splash_mat.set_shader_parameter("width", 0.03 * flake_size)
 		_splash_mat.set_shader_parameter("rate", 1.6)
 		_splash_mat.set_shader_parameter("box", Vector3(26, 26, 26))
 		_splash_mat.set_shader_parameter("tint", Color(0.95, 0.97, 1.0, 0.95))
-		_splash.instance_count = maxi(int(q.rain * intensity * 0.15), 20)
+		_splash.instance_count = maxi(int(q.rain * intensity * 0.15 * splashes), 20)
+
+
+func _sprite(mat: ShaderMaterial, tex: Texture2D) -> void:
+	mat.set_shader_parameter("use_sprite", tex != null)
+	mat.set_shader_parameter("sprite_tex", tex)
 
 
 func _build_bolt() -> void:
@@ -443,6 +537,15 @@ func _build_bolt() -> void:
 	_bolt_mat.vertex_color_use_as_albedo = true
 	_bolt_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_bolt_mat.disable_fog = true
+	# Soft across the ribbon: clear at the edges, full in the middle
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 0), Color.WHITE, Color(1, 1, 1, 0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.width = 64
+	tex.height = 1
+	_bolt_mat.albedo_texture = tex
 	var mi := MeshInstance3D.new()
 	mi.mesh = _bolt_mesh
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -463,47 +566,73 @@ func _ground_at(x: float, z: float) -> float:
 	return ground_height.call(x, z) if ground_height.is_valid() else global_position.y
 
 
-## Lightning from the cloud base to the ground: at `at`, or somewhere in front of the camera.
-func strike(at: Variant = null) -> void:
+## Lightning from the cloud base to the ground: at `at`, or somewhere in front of the camera
+## (`strike_range` away). `sheet`: it stays in the cloud instead, a flicker crawling through the
+## cloud base over `at` (no bolt to the ground, no `struck`); null: `in_cloud` decides.
+func strike(at: Variant = null, sheet: Variant = null) -> void:
 	var cam := get_viewport().get_camera_3d()
 	var eye := cam.global_position if cam else global_position
+	var in_sky: bool = sheet if sheet is bool else _rng.randf() < in_cloud
 	var target: Vector3
 	if at is Vector3:
 		target = at
 	else:
 		var fwd := -cam.global_basis.z if cam else Vector3.FORWARD
 		var ang := atan2(fwd.x, fwd.z) + _rng.randf_range(-0.6, 0.6)
-		var d := _rng.randf_range(450.0, 2600.0)
+		var d := _rng.randf_range(strike_range.x, maxf(strike_range.y, strike_range.x))
 		target = Vector3(eye.x + sin(ang) * d, 0, eye.z + cos(ang) * d)
 	target.y = _ground_at(target.x, target.z)
-	var top := target + Vector3(_rng.randf_range(-400.0, 400.0), 0, _rng.randf_range(-400.0, 400.0))
-	top.y = maxf(global_position.y + base, target.y + 300.0)
+	var cloud_y := maxf(global_position.y + base, target.y + 300.0)
 	_bolt_paths.clear()
-	var main := _jag(top, target, 8, 0.16)
-	_bolt_paths.append({pts = main, w = 1.0, b = 1.0})
-	_branch(main, 0.55, 2, target.y)
+	var rough := jaggedness
+	if in_sky:
+		# A crawler: forks spreading sideways through the cloud base
+		var c := Vector3(target.x, cloud_y + 150.0, target.z)
+		var a := _rng.randf() * TAU
+		var reach := _rng.randf_range(700.0, 1500.0)
+		var dir := Vector3(cos(a), 0.0, sin(a)) * reach
+		var main := _jag(c - dir, c + dir, 7, rough * 1.2)
+		_bolt_paths.append({pts = main, w = 0.7, b = 0.7})
+		_branch(main, 0.5, 2, cloud_y - 150.0, true)
+		target = c
+	else:
+		var top := target + Vector3(_rng.randf_range(-400.0, 400.0), 0, _rng.randf_range(-400.0, 400.0))
+		top.y = cloud_y
+		var main := _jag(top, target, 8, rough)
+		_bolt_paths.append({pts = main, w = 1.0, b = 1.0})
+		_branch(main, 0.55, 2, target.y, false)
 	_bolt_at = target
 	_bolt_t = 0.0
+	_stroke_seed = _rng.randf()
 	bolts += 1
 	var dist := eye.distance_to(target)
 	_thunder = dist / SOUND
 	_thunder_km = dist / 1000.0
-	_bolt_light.global_position = target + Vector3(0, 200, 0)
-	struck.emit(target)
+	_bolt_light.global_position = target + Vector3(0, 200 if not in_sky else -100, 0)
+	if not in_sky:
+		struck.emit(target)
 
 
-func _branch(path: PackedVector3Array, bright: float, depth: int, ground_y: float) -> void:
+## Forks off a path; `sideways` (in-cloud) forks spread level instead of reaching down.
+func _branch(path: PackedVector3Array, bright: float, depth: int, ground_y: float, sideways: bool) -> void:
 	if depth <= 0:
 		return
+	var chance := branching * 0.14
 	for i in range(3, path.size() - 6):
-		if _rng.randf() > 0.07:
+		if _rng.randf() > chance:
 			continue
 		var start := path[i]
-		var drop := (start.y - ground_y) * _rng.randf_range(0.15, 0.45)
-		var end := start + Vector3(_rng.randf_range(-0.8, 0.8) * drop, -drop, _rng.randf_range(-0.8, 0.8) * drop)
-		var b := _jag(start, end, 6, 0.2)
+		var end: Vector3
+		if sideways:
+			var reach := _rng.randf_range(250.0, 700.0)
+			var a := _rng.randf() * TAU
+			end = start + Vector3(cos(a) * reach, _rng.randf_range(-120.0, 60.0), sin(a) * reach)
+		else:
+			var drop := (start.y - ground_y) * _rng.randf_range(0.15, 0.45)
+			end = start + Vector3(_rng.randf_range(-0.8, 0.8) * drop, -drop, _rng.randf_range(-0.8, 0.8) * drop)
+		var b := _jag(start, end, 6, jaggedness * 1.25)
 		_bolt_paths.append({pts = b, w = 0.5 * bright, b = bright})
-		_branch(b, bright * 0.55, depth - 1, ground_y)
+		_branch(b, bright * 0.55, depth - 1, ground_y, sideways)
 
 
 ## A jagged line by midpoint displacement: each pass splits every segment and nudges the middle.
@@ -523,13 +652,20 @@ func _jag(a: Vector3, b: Vector3, passes: int, rough: float) -> PackedVector3Arr
 	return pts
 
 
-## How bright the bolt is `t` seconds after it struck: a few return strokes, then gone.
+## How bright the bolt is `t` seconds after it struck: `strokes` return strokes (each a bright
+## flash then a dim gap), then it fades; all stretched by `bolt_time`.
 func _bolt_brightness(t: float) -> float:
-	if t < 0.07: return 1.0
-	if t < 0.13: return 0.15
-	if t < 0.2: return 0.9
-	if t < 0.27: return 0.2
-	if t < 0.5: return 0.75 * (1.0 - (t - 0.27) / 0.23)
+	t /= maxf(bolt_time, 0.05)
+	var period := 0.135
+	var end := strokes * period
+	if t < end:
+		var k := floori(t / period)
+		var on := fmod(t, period) < 0.07
+		# Later strokes a little weaker, and each a touch different
+		var jitter := 1.0 if k == 0 else 0.9 + 0.1 * sin(_stroke_seed * 40.0 + k * 2.3)
+		return (maxf(1.0 - 0.1 * k, 0.4) * jitter) if on else (0.15 + 0.05 * k)
+	if t < end + 0.23:
+		return 0.75 * (1.0 - (t - end) / 0.23)
 	return 0.0
 
 
@@ -539,21 +675,35 @@ func _draw_bolt(bright: float, cam: Vector3) -> void:
 		return
 	var dist := cam.distance_to(_bolt_at)
 	# Wider when far, so it reads at any distance; a soft glow round a white core
-	var core := clampf(dist * 0.0018, 0.6, 6.0)
+	var core := clampf(dist * 0.0018, 0.25, 6.0) * bolt_width
 	_bolt_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _bolt_mat)
 	for pass_i in 2:
 		var glow := pass_i == 0
+		if glow and bolt_glow <= 0.0:
+			continue
 		for path in _bolt_paths:
 			var pts: PackedVector3Array = path.pts
-			var w: float = core * path.w * (7.0 if glow else 1.0)
-			var col := Color(0.55, 0.6, 1.0, 0.22 * bright * path.b) if glow else Color(1, 1, 1, bright * path.b)
+			# Ribbons with soft edges (the material's texture fades across them), joined at the
+			# corners: each point's side faces the camera across the line through its neighbours
+			var w: float = core * path.w * (8.0 * sqrt(bolt_glow) if glow else 1.6)
+			var gc := bolt_color
+			gc.a = minf(0.3 * bolt_glow, 0.95) * bright * path.b
+			var col := gc if glow else Color(1, 1, 1, bright * path.b)
+			var n := pts.size()
+			var sides := PackedVector3Array()
+			sides.resize(n)
+			for i in n:
+				var along := pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]
+				sides[i] = along.cross(cam - pts[i]).normalized() * w
 			_bolt_mesh.surface_set_color(col)
-			for i in pts.size() - 1:
-				var p0 := pts[i]
-				var p1 := pts[i + 1]
-				var side := (p1 - p0).cross(cam - p0).normalized() * w
-				for v in [p0 - side, p0 + side, p1 + side, p0 - side, p1 + side, p1 - side]:
-					_bolt_mesh.surface_add_vertex(v)
+			for i in n - 1:
+				var a0 := pts[i] - sides[i]
+				var a1 := pts[i] + sides[i]
+				var b0 := pts[i + 1] - sides[i + 1]
+				var b1 := pts[i + 1] + sides[i + 1]
+				for v in [[a0, 0.0], [a1, 1.0], [b1, 1.0], [a0, 0.0], [b1, 1.0], [b0, 0.0]]:
+					_bolt_mesh.surface_set_uv(Vector2(v[1], 0.5))
+					_bolt_mesh.surface_add_vertex(v[0])
 	_bolt_mesh.surface_end()
 
 
@@ -572,7 +722,7 @@ func _process(delta: float) -> void:
 
 	# Light: clouds and rain take the brightness out of the day
 	day = Daylight.at(hour)
-	var dim_target: float = [cover * 0.25, 0.45 + 0.5 * cover, 0.55 + 0.4 * cover, cover * 0.1][cloud_type]
+	var dim_target: float = [cover * 0.25, 0.45 + 0.5 * cover, 0.55 + 0.4 * cover, cover * 0.1, cover * 0.18][cloud_type] * (0.3 + 0.7 * density)
 	if precip != Precip.NONE:
 		dim_target = maxf(dim_target, 0.35 + 0.4 * intensity)
 	dim = lerpf(dim, clampf(dim_target, 0.0, 0.95), clampf(dt * 2.0, 0.0, 1.0))
@@ -590,7 +740,9 @@ func _process(delta: float) -> void:
 	_draw_bolt(bright, cam)
 	_flash = maxf(bright, _flash - dt * 4.0)
 	var near_flash := _flash * clampf(1.6 - cam.distance_to(_bolt_at) / 3000.0, 0.25, 1.0)
-	_bolt_light.light_energy = _flash * 6.0
+	near_flash *= flash_light
+	_bolt_light.light_energy = _flash * 6.0 * flash_light
+	_bolt_light.light_color = Color.WHITE.lerp(bolt_color, 0.45)
 	if environment:
 		environment.ambient_light_energy = 0.9 + near_flash * 2.5
 	if _thunder > 0.0:
@@ -602,23 +754,29 @@ func _process(delta: float) -> void:
 	var zen := zenith_color()
 	sky_material.set_shader_parameter("cloud_offset", _sky_drift)
 	sky_material.set_shader_parameter("flash", near_flash * 0.35)
+	var layer := 0.0
 	match cloud_type:
 		Clouds.CUMULUS:
-			sky_material.set_shader_parameter("cloud_cover", cover * 0.3)
+			layer = cover * 0.3
 			sky_material.set_shader_parameter("cloud_scale", 2.2)
 			sky_material.set_shader_parameter("cloud_stretch", Vector2(1, 2.5))
 		Clouds.STRATUS:
-			sky_material.set_shader_parameter("cloud_cover", 0.55 + cover * 0.45)
+			layer = 0.55 + cover * 0.45
 			sky_material.set_shader_parameter("cloud_scale", 0.6)
 			sky_material.set_shader_parameter("cloud_stretch", Vector2(1, 1))
 		Clouds.STORM:
-			sky_material.set_shader_parameter("cloud_cover", 0.5 + cover * 0.3)
+			layer = 0.5 + cover * 0.3
 			sky_material.set_shader_parameter("cloud_scale", 0.8)
 			sky_material.set_shader_parameter("cloud_stretch", Vector2(1, 1))
 		Clouds.CIRRUS:
-			sky_material.set_shader_parameter("cloud_cover", cover * 0.85)
+			layer = cover * 0.85
 			sky_material.set_shader_parameter("cloud_scale", 2.6)
 			sky_material.set_shader_parameter("cloud_stretch", Vector2(1, 5))
+		Clouds.ALTOCUMULUS:
+			layer = cover * 0.45
+			sky_material.set_shader_parameter("cloud_scale", 3.2)
+			sky_material.set_shader_parameter("cloud_stretch", Vector2(1, 1.6))
+	sky_material.set_shader_parameter("cloud_cover", clampf(layer * sky_layer, 0.0, 1.0))
 	if environment:
 		var fog_d := 0.00006 + fog * fog * 0.006
 		if precip != Precip.NONE:
@@ -637,19 +795,25 @@ func _process(delta: float) -> void:
 	_cloud_mat.set_shader_parameter("flash", _flash)
 	_cloud_mat.set_shader_parameter("gloom", dim if cloud_type != Clouds.CUMULUS else dim * 0.5)
 	_cloud_mat.set_shader_parameter("flash_pos", Vector3(_bolt_at.x, global_position.y + base + 300.0, _bolt_at.z))
+	_cloud_mat.set_shader_parameter("flash_light", flash_light)
+	_cloud_mat.set_shader_parameter("opacity", density)
+	_cloud_mat.set_shader_parameter("softness", softness)
+	_cloud_mat.set_shader_parameter("belly", belly)
+	_cloud_mat.set_shader_parameter("lining", lining)
+	_cloud_mat.set_shader_parameter("tint", cloud_tint)
 	_place_puffs(cam)
 
 	# What the rain and snow leave behind
 	var raining := intensity if precip == Precip.RAIN else (intensity * 0.4 if precip == Precip.HAIL else 0.0)
 	if settle:
 		if raining > 0.0:
-			wet = minf(wet + raining * dt * 0.08, 1.0)
+			wet = minf(wet + raining * dt * 0.08 * settle_rate, 1.0)
 		else:
-			wet = maxf(wet - dt * (0.004 + 0.012 * (1.0 - day.night) * (1.0 - dim)), 0.0)
+			wet = maxf(wet - dt * (0.004 + 0.012 * (1.0 - day.night) * (1.0 - dim)) * dry_rate, 0.0)
 		if precip == Precip.SNOW or precip == Precip.HAIL:
-			snow_depth = minf(snow_depth + intensity * dt * (0.03 if precip == Precip.SNOW else 0.012), 1.0)
+			snow_depth = minf(snow_depth + intensity * dt * (0.03 if precip == Precip.SNOW else 0.012) * settle_rate, 1.0)
 		else:
-			snow_depth = maxf(snow_depth - dt * (0.002 + 0.006 * (1.0 - day.night) + raining * 0.02), 0.0)
+			snow_depth = maxf(snow_depth - dt * (0.002 + 0.006 * (1.0 - day.night) + raining * 0.02) * melt, 0.0)
 	else:
 		wet = 0.0
 		snow_depth = 0.0
@@ -659,7 +823,9 @@ func _process(delta: float) -> void:
 		m.set_shader_parameter("raining", raining)
 		m.set_shader_parameter("zenith", zen)
 		m.set_shader_parameter("horizon", hor)
-		m.set_shader_parameter("shadow_amount", cover * (1.0 - dim) * (1.0 - day.night) * (0.9 if cloud_type == Clouds.CUMULUS else 0.0))
+		m.set_shader_parameter("shadow_amount", cover * (1.0 - dim) * (1.0 - day.night) * cloud_shadows
+			* [0.9, 0.0, 0.0, 0.0, 0.5][cloud_type])
+		m.set_shader_parameter("puddles", puddles)
 		m.set_shader_parameter("shadow_cover", cover * 0.6)
 		m.set_shader_parameter("shadow_offset", _drift / 8000.0)
 		m.set_shader_parameter("wind", 0.0 if m.has_meta("still") else wind)

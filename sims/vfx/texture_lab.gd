@@ -10,6 +10,10 @@ extends Sim3D
 const GEN_LIB := preload("res://sims/vfx/texture_gen.gdshaderinc")
 const POST_SHADER := preload("res://sims/vfx/texture_post.gdshader")
 const PREVIEW_SHADER := preload("res://sims/vfx/texture_preview.gdshader")
+const STAMP_SHADER := preload("res://sims/vfx/texture_stamp.gdshader")
+## The particle sprites (the kit's real leaves among them) are the built-in stamps.
+const Sprites := preload("res://sims/vfx/particles/textures.gd")
+const STAMP_MODES := ["Off", "Scatter", "Tile", "Mask", "Base"]
 const TEX := 512
 const PLANE := 10.0
 
@@ -69,10 +73,26 @@ var preview := 0
 var relief := 1.5
 var tile_edges := false
 var export_size := 1024
+## The stamp pass (texture_stamp.gdshader): a sprite scattered or tiled over the height, used as a
+## mask, or (Base) a picture whose brightness is the height.
+var stamp_mode := 0
+var stamp_id := "leaf_maple"
+var stamp_cells := 6.0
+var stamp_size := 0.8
+var stamp_size_rand := 0.3
+var stamp_jitter := 1.0
+var stamp_spin := 1.0
+var stamp_level := 0.75
+var stamp_strength := 1.0
+var photo_colours := false
 
 var height_vp := SubViewport.new() # generator pass: packed height
 var out_vp := SubViewport.new() # output pass: what is shown and saved
 var height_rect := ColorRect.new()
+var stamp_vp := SubViewport.new() # stamp pass: packed height with the stamps laid on
+var stamp_rect := ColorRect.new()
+var stamp_mat := ShaderMaterial.new()
+var _stamp_frames := 0
 var out_rect := ColorRect.new()
 var gen_mat := ShaderMaterial.new()
 var post_mat := ShaderMaterial.new()
@@ -105,6 +125,10 @@ func help() -> String:
 		+ "Output maps the height through a colour ramp (Auto picks one per pattern), with levels, contrast, "
 		+ "posterize and a normal-map view. Seamless makes every type tile exactly; check it on Tiled. "
 		+ "(Rotation only applies with Seamless off.)\n\n"
+		+ "Stamp lays a picture over it: a built-in sprite, one you draw (+ Draw) or an imported image (+ Import). "
+		+ "Scatter strews it about (Count, Stamp size, Scatter, Spin), Tile sets it in rows, both seamless; Height "
+		+ "is what it lays down (0 cuts holes). Mask shows the texture only where the picture is; Base makes the "
+		+ "picture's brightness the height, to colour, bump and tile (Photo colours keeps its own colours).\n\n"
 		+ "Flat and Tiled: drag to pan, pinch or scroll to zoom. Sphere and Terrain: drag to orbit. "
 		+ "Export renders colour, normal map and height at the chosen size and sends them, with the settings, to "
 		+ "GameCommon's asset library; Send to project... copies them into a game's assets/textures/.")
@@ -134,8 +158,11 @@ func build() -> void:
 		else ThemeDB.fallback_font
 	gen_mat.shader = _gen_shader()
 	post_mat.shader = POST_SHADER
-	post_mat.set_shader_parameter("height_tex", height_vp.get_texture())
+	stamp_mat.shader = STAMP_SHADER
+	stamp_mat.set_shader_parameter("height_tex", height_vp.get_texture())
+	post_mat.set_shader_parameter("height_tex", stamp_vp.get_texture())
 	_make_pass(height_vp, gen_mat, height_rect)
+	_make_pass(stamp_vp, stamp_mat, stamp_rect)
 	_make_pass(out_vp, post_mat, out_rect)
 	ramp_tex.width = 256
 
@@ -152,7 +179,7 @@ func build() -> void:
 	for m: ShaderMaterial in [sphere_mat, terrain_mat]:
 		m.shader = PREVIEW_SHADER
 		m.set_shader_parameter("albedo_tex", out_vp.get_texture())
-		m.set_shader_parameter("height_tex", height_vp.get_texture())
+		m.set_shader_parameter("height_tex", stamp_vp.get_texture())
 	sphere_mat.set_shader_parameter("uv_scale", Vector2(2, 1))
 	sphere_mat.set_shader_parameter("texel", 1.0 / TEX)
 	terrain_mat.set_shader_parameter("texel", 2.0 / TEX)
@@ -213,12 +240,38 @@ func _gen_shader() -> Shader:
 
 func _param(name: String, value: Variant) -> void:
 	gen_mat.set_shader_parameter(name, value)
+	# the stamps are shuffled by the seed, and a Base picture is shaped like the noise was
+	if name in ["seed", "contrast", "level_lo", "level_hi", "invert", "posterize"]:
+		stamp_mat.set_shader_parameter(name, value)
 	_dirty = true
 
 
 func _post(name: String, value: Variant) -> void:
 	post_mat.set_shader_parameter(name, value)
-	_post_frames = 1
+	_post_frames = maxi(_post_frames, 1)
+
+
+## A stamp setting: the stamp pass and the output run again, not the generator.
+func _stamp(name: String, value: Variant) -> void:
+	stamp_mat.set_shader_parameter(name, value)
+	_stamp_frames = 2
+	_post_frames = 3
+
+
+func _apply_stamp() -> void:
+	var tex := ShapePad.texture(stamp_id, func(n: String) -> Texture2D:
+		return Sprites.get_texture(n if n in Sprites.NAMES else "leaf"))
+	_stamp("stamp", tex)
+	_stamp("mode", stamp_mode)
+	_stamp("cells", stamp_cells)
+	_stamp("stamp_size", stamp_size)
+	_stamp("size_rand", stamp_size_rand)
+	_stamp("jitter", stamp_jitter)
+	_stamp("spin", stamp_spin)
+	_stamp("level", stamp_level)
+	_stamp("strength", stamp_strength)
+	_post("base_tex", tex)
+	_post("base_colour", photo_colours and stamp_mode == 4)
 
 
 func _set_generator() -> void:
@@ -244,6 +297,7 @@ func _apply_all() -> void:
 	_param("posterize", posterize)
 	_post("normal_strength", bump)
 	_post("view_mode", view)
+	_apply_stamp()
 	_apply_ramp()
 	_apply_relief()
 
@@ -386,7 +440,45 @@ func controls() -> Array:
 			queue_redraw()},
 		{type = "button", label = "Reset view", on = func() -> void: _set_preview(preview)},
 
-	] + _export_controls()
+	] + _stamp_controls() + _export_controls()
+
+
+## The Stamp section: a sprite (built in, drawn on the shape pad, or an imported picture) laid
+## over the texture.
+func _stamp_controls() -> Array:
+	var set_and := func(apply: Callable) -> Callable:
+		return func(v: float) -> void:
+			apply.call(v)
+			_apply_stamp()
+	var c: Array = [
+		{type = "section", label = "Stamp"},
+		{type = "choice", label = "Use", options = STAMP_MODES, value = stamp_mode, on = func(i: int) -> void:
+			stamp_mode = i
+			_apply_stamp()},
+	]
+	c.append_array(ShapePad.picker_controls("Image", stamp_id, func(id: String) -> void:
+		stamp_id = id
+		_apply_stamp(), ShapePad.builtins(Sprites.NAMES, Sprites.LABELS, Sprites.get_texture)))
+	c.append_array([
+		{type = "slider", label = "Count", min = 1, max = 24, step = 1, value = stamp_cells, fmt = "%d",
+			on = set_and.call(func(v: float) -> void: stamp_cells = v)},
+		{type = "slider", label = "Stamp size", min = 0.1, max = 2.0, step = 0.05, value = stamp_size, fmt = "%.2f",
+			on = set_and.call(func(v: float) -> void: stamp_size = v)},
+		{type = "slider", label = "Size random", min = 0, max = 1, step = 0.01, value = stamp_size_rand, fmt = "%.2f",
+			on = set_and.call(func(v: float) -> void: stamp_size_rand = v)},
+		{type = "slider", label = "Scatter", min = 0, max = 1, step = 0.01, value = stamp_jitter, fmt = "%.2f",
+			on = set_and.call(func(v: float) -> void: stamp_jitter = v)},
+		{type = "slider", label = "Spin", min = 0, max = 1, step = 0.01, value = stamp_spin, fmt = "%.2f",
+			on = set_and.call(func(v: float) -> void: stamp_spin = v)},
+		{type = "slider", label = "Height", min = 0, max = 1, step = 0.01, value = stamp_level, fmt = "%.2f",
+			on = set_and.call(func(v: float) -> void: stamp_level = v)},
+		{type = "slider", label = "Strength", min = 0, max = 1, step = 0.01, value = stamp_strength, fmt = "%.2f",
+			on = set_and.call(func(v: float) -> void: stamp_strength = v)},
+		{type = "toggle", label = "Photo colours", value = photo_colours, on = func(on: bool) -> void:
+			photo_colours = on
+			_apply_stamp()},
+	])
+	return c
 
 
 ## The Export section, with the size to render at just under its header.
@@ -440,6 +532,8 @@ func export_asset(asset_name: String) -> void:
 	_size_passes(n)
 	height_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	await RenderingServer.frame_post_draw
+	stamp_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	await RenderingServer.frame_post_draw
 	# the output pass reads the new height on the frame after; once for each view
 	var files := {}
 	for pass_view: Array in [[0, "png"], [2, "normal.png"], [1, "height.png"]]:
@@ -451,7 +545,16 @@ func export_asset(asset_name: String) -> void:
 	_size_passes(TEX)
 	_dirty = true
 	_saving = false
-	files["json"] = JSON.stringify(settings(), "  ")
+	var s := settings()
+	if stamp_mode > 0:
+		# the stamp's picture goes along (and inside the JSON when it is one of the user's own)
+		var tex := ShapePad.texture(stamp_id, Sprites.get_texture)
+		if tex:
+			files["stamp.png"] = tex.get_image().save_png_to_buffer()
+		var packed := ShapeStore.pack([stamp_id])
+		if not packed.is_empty():
+			s.sprites = packed
+	files["json"] = JSON.stringify(s, "  ")
 	var file := Exporter.slug(asset_name)
 	var use := "var mat := StandardMaterial3D.new()\n"
 	use += "mat.albedo_texture = load(\"res://assets/textures/%s.png\")\n" % file
@@ -467,13 +570,17 @@ func settings() -> Dictionary:
 	return {type = TYPES[gen_type], basis = basis, seed = seed_value, scale = tex_scale, octaves = octaves,
 		lacunarity = lacunarity, gain = gain, warp = warp, jitter = jitter, rotation = rotation_deg,
 		time = anim_time, ramp = _ramp_name(), contrast = contrast, level_lo = level_lo, level_hi = level_hi,
-		posterize = posterize, bump = bump, invert = invert, seamless = seamless, size = export_size}
+		posterize = posterize, bump = bump, invert = invert, seamless = seamless, size = export_size,
+		stamp = {mode = STAMP_MODES[stamp_mode], sprite = stamp_id, count = stamp_cells, size = stamp_size,
+			size_random = stamp_size_rand, jitter = stamp_jitter, spin = stamp_spin, height = stamp_level,
+			strength = stamp_strength, photo_colours = photo_colours}}
 
 
 func _size_passes(n: int) -> void:
-	for vp: SubViewport in [height_vp, out_vp]:
+	for vp: SubViewport in [height_vp, stamp_vp, out_vp]:
 		vp.size = Vector2i(n, n)
 	height_rect.size = Vector2(n, n)
+	stamp_rect.size = Vector2(n, n)
 	out_rect.size = Vector2(n, n)
 
 
@@ -491,8 +598,12 @@ func _process(delta: float) -> void:
 	if _dirty:
 		_dirty = false
 		height_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
-		# this frame and the next, so the output pass surely sees the new height
-		_post_frames = 2
+		# then the stamp pass and the output, a frame or two on, so each surely sees the pass before
+		_stamp_frames = 2
+		_post_frames = 3
+	if _stamp_frames > 0:
+		_stamp_frames -= 1
+		stamp_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 	if _post_frames > 0:
 		_post_frames -= 1
 		out_vp.render_target_update_mode = SubViewport.UPDATE_ONCE

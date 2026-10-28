@@ -1,55 +1,64 @@
 extends Sim3D
-## Tree Lab: one generated tree on a turntable, every setting of GameCommon's PineTree and LeafyTree
-## on a slider. The sliders are modifiers over the chosen species' preset (100% is the preset), so
-## a species change keeps them. The tree is rebuilt at most every REBUILD seconds while a slider
-## moves; the forest round it, once the sliders have been still for FOREST_WAIT.
+## Tree Lab: one tree on a turntable, grown by GameCommon's TreeGen (godot/tree), every setting on a
+## slider. A species is a preset of those settings; any species takes any way of drawing its leaves.
+## The tree is rebuilt at most every REBUILD seconds while a slider moves; the forest round it, once
+## the sliders have been still for FOREST_WAIT. Bush is the painted-woodland kit's 3D bushes.
 
-const SWAY := preload("res://sims/vfx/trees_sway.gdshader")
 const GRID := preload("res://sims/vfx/trees_grid.gdshader")
 const LITTER := preload("res://sims/vfx/trees_litter.gdshader")
-const SPECIES := ["Fir", "Spruce", "Snowy", "Lodgepole", "Sapling", "Oak", "Aspen", "Cottonwood", "Willow", "Pinyon",
-	"Painted oak", "Tall", "Leaner", "Painted aspen", "Snag", "Bush"]
-## The painted-woodland kit's trees (Woodland.KINDS), after the cel-shaded species; then its 3D bushes.
-const PAINTED := {"Painted oak": "oak", "Tall": "tall", "Leaner": "leaner", "Painted aspen": "aspen", "Snag": "snag"}
-const FIRST_PAINTED := 10
-const LEAF_NAMES := ["Own", "Beech", "Oak", "Maple", "Aspen", "Birch"]
+const BUSH := "Bush"
 const BUSH_NAMES := ["Bronze", "Ember", "Bracken", "Shadow", "Holly"]
-## Towards the sun (the scene's light, over the camera's left shoulder): the painted trees light
-## themselves from it, as the kit's shaders do.
+const STYLES := ["Blobs", "Fluffy", "Needles", "Painted", "None"]
+const SHAPES := ["Conical", "Spherical", "Hemispherical", "Cylindrical", "Tapered", "Flame", "Inverse", "Tend flame"]
+const PAINTED_LEAVES := ["Beech", "Oak", "Maple", "Aspen", "Birch"]
+## Leaf colours to try on any tree: inner, outer, tips. "Preset" keeps the species' own.
+const PALETTES := {
+	"Preset": [],
+	"Summer": [Color(0.09, 0.2, 0.09), Color(0.2, 0.4, 0.16), Color(0.45, 0.62, 0.26)],
+	"Spring": [Color(0.18, 0.32, 0.1), Color(0.42, 0.62, 0.2), Color(0.72, 0.86, 0.38)],
+	"Autumn": [Color(0.38, 0.13, 0.04), Color(0.84, 0.4, 0.1), Color(1.0, 0.74, 0.24)],
+	"Gold": [Color(0.45, 0.32, 0.06), Color(0.88, 0.64, 0.14), Color(1.0, 0.85, 0.3)],
+	"Red": [Color(0.36, 0.06, 0.04), Color(0.78, 0.2, 0.08), Color(1.0, 0.55, 0.18)],
+	"Conifer": [Color(0.10, 0.22, 0.16), Color(0.24, 0.42, 0.26), Color(0.40, 0.56, 0.32)],
+	"Blue spruce": [Color(0.12, 0.22, 0.24), Color(0.3, 0.46, 0.48), Color(0.56, 0.7, 0.7)],
+	"Ghostly": [Color(0.2, 0.22, 0.28), Color(0.55, 0.6, 0.68), Color(0.85, 0.9, 0.95)],
+}
+## Towards the sun (the scene's light, over the camera's left shoulder): the leaf litter and the
+## bushes light themselves from it, as the painted-woodland kit's shaders do.
 const SUN_DIR := Vector3(-3, 10, 9)
 const SUN_COLOR := Color(1.0, 0.9, 0.74)
-## PineTree settings for the pine species (as the component's example.gd)
-const PINES := [
-	{},
-	{droop = 0.85, spread = 0.36, whorls = 15, branches = 9, taper = 0.9},
-	{snow = 0.8, droop = 0.6, needles_outer = Color(0.2, 0.36, 0.26)},
-	{spread = 0.22, crown_base = 0.45, whorls = 8, droop = 0.2, height = 13.0},
-	{height = 3.5, whorls = 6, branches = 6, sprigs = 1},
-]
 const PLINTH := 0.25
 const REBUILD := 0.12
 const FOREST_WAIT := 0.5
+## The lines of View: Wire, swaying with the tree (the same wind as its shaders).
+const WIRE := """
+shader_type spatial;
+render_mode unshaded, cull_disabled;
+#include "res://tree/tree_common.gdshaderinc"
+uniform vec3 wire_color : source_color = vec3(0.35, 0.85, 1.0);
+void vertex() {
+	VERTEX += (inverse(MODEL_MATRIX) * vec4(tree_wind(MODEL_MATRIX, VERTEX, UV2.y, TIME), 0.0)).xyz;
+}
+void fragment() {
+	ALBEDO = wire_color;
+}
+"""
 
-var species := 5
+var names: Array = TreeGen.PRESETS.keys() + [BUSH]
+var species := 0
+var gen := TreeGen.preset(names[0])
 var tree_seed := 1
+var palette := 0
+var autumn := 0.0
 var view := 0
-var shading := 1
 var wind := 0.35
+var turbulence := 0.3
 var spin := true
 var forest_on := false
-var mods := {height = 1.0, girth = 1.0, width = 1.0, base = 0.0, branches = 1.0, droop = 0.0,
-	foliage = 1.0, detail = 1.0, wild = 0.0, lean = 0.0, autumn = 0.0, snow = 0.0, roots = 1.0, swirl = 0.0}
-## painted trees: which real leaf their clumps are cut from (0 their own), and the season (0 summer,
-## 1 autumn, 2 late autumn); which bush
-var leaf_kind := 0
-var season := 1.0
 var bush_kind := 0
 var floor_kind := 0 # 0 the editor grid, 1 leaf litter
 
-var painted := Node3D.new() # a painted tree's leaf clumps, or a bush, on the turntable
-var bark_mat: ShaderMaterial
-var birch_mat: ShaderMaterial
-var foliage_mat: ShaderMaterial
+var painted := Node3D.new() # a bush on the turntable
 var lying_mat: ShaderMaterial
 var grid_floor := MeshInstance3D.new()
 var litter_floor := MeshInstance3D.new()
@@ -57,38 +66,37 @@ var litter_mat := ShaderMaterial.new()
 var lying := Node3D.new()
 var stand: Array[Node3D] = [] # the plinth and its rim
 var _height := 8.0
-var _clumps := 0
 
-var tree_mat := ShaderMaterial.new()
 var wire_mat := ShaderMaterial.new()
 var turntable := Node3D.new()
 var tree := MeshInstance3D.new()
 var wire := MeshInstance3D.new()
 var forest := Node3D.new()
 
-var _made: Resource
+var _made: TreeGen
 var _dirty := true
 var _forest_dirty := false
 var _since := 1.0
 var _still := 0.0
 var _build_ms := 0.0
 var _tris := 0
-var _forest_tris := 0
 var _forest_draws := 0
 
 
 func help() -> String:
-	return ("A tree grown from code, as the games grow theirs: GameCommon's PineTree (fir, spruce, lodgepole, sapling) "
-		+ "and LeafyTree (oak, aspen, cottonwood, willow, pinyon). Pick a species, then bend its settings: the sliders are "
-		+ "modifiers on that species' preset. The same settings and seed always make the same tree.\n\n"
-		+ "View shows what the games' shaders use: Normals are bent out from the trunk so the crown shades as one soft shape; "
-		+ "Sway is how much each corner moves in the wind (UV2.y on leafy trees); Wire shows the triangles.\n\n"
-		+ "Forest plants a wood of the current tree: a MultiMesh per variant, plainer trees far off.\n\n"
-		+ "The painted species (painted oak, tall, leaner, painted aspen, snag) are the painted-woodland kit's, after Over "
-		+ "the Garden Wall: rope-twisted trunks that lean and swell at the foot, roots, swirling branches, and leaf clumps "
-		+ "cut from real leaf outlines. They light themselves by hand from the sun's direction instead of using the "
-		+ "engine's lights. Bush is the kit's real 3D bushes, leaf by leaf. Ground: Leaf litter lays the kit's painted "
-		+ "ground with leaves lying on it.\n\n"
+	return ("Every tree here is grown by one algorithm, GameCommon's TreeGen, as the games grow theirs. A trunk grows "
+		+ "branches, which grow their own, up to four levels deep. Branching sets how many there are, at what angle, "
+		+ "how they are turned round their parent (the golden angle, as most plants do), how long and thick they are, "
+		+ "and whether they reach for the light, sag, weep, curl or wander. Apical dominance is the leader: strong, "
+		+ "the trunk runs to the top and the crown is a cone (a conifer); weak, the trunk forks low into limbs (an oak). "
+		+ "The trunk's branches grow out to the crown's outline, which Crown shape draws.\n\n"
+		+ "Leaves grow on the outermost twigs and can be drawn five ways, on any species: Blobs (lumpy faceted balls), "
+		+ "Fluffy (quads over each clump, turned part way to the camera and cut out of a leaf texture, with normals bent "
+		+ "out from the crown so it shades as one soft mass), Needles (crossed cards of needles along each frond, a pine's), "
+		+ "Painted (big camera-facing cards of real leaf shapes, after Over the Garden Wall), or None.\n\n"
+		+ "View shows what the shaders use: Normals (bent out from the crown), Sway (how much each corner moves in "
+		+ "the wind, UV2.y), Wire (the triangles). Forest plants a wood of the current tree, a MultiMesh per variant "
+		+ "with plainer trees far off. The same settings and seed always make the same tree.\n\n"
 		+ "Drag to orbit, pinch or wheel to zoom, two fingers to pan.")
 
 
@@ -97,10 +105,8 @@ func hint() -> String:
 
 
 func status() -> String:
-	var name: String = SPECIES[species] if not _is_bush() else "%s bush" % BUSH_NAMES[bush_kind]
+	var name: String = names[species] if not _is_bush() else "%s bush" % BUSH_NAMES[bush_kind]
 	var s := "%s · seed %d · %.1fk tris · built %d ms" % [name, tree_seed, _tris / 1000.0, roundi(_build_ms)]
-	if _is_painted() and _clumps > 0:
-		s += " · %d clumps" % _clumps
 	if forest_on and _forest_draws > 0:
 		s += " · forest %d draws" % _forest_draws
 	return s
@@ -117,14 +123,13 @@ func build() -> void:
 	environment.fog_light_color = Color("aeb8c2")
 	environment.fog_density = 0.006
 	# over the camera's left shoulder, so the crown is lit with its shading turning away to the right
-	sun.look_at_from_position(Vector3(-3, 10, 9), Vector3.ZERO, Vector3.UP)
+	sun.look_at_from_position(SUN_DIR, Vector3.ZERO, Vector3.UP)
 	sun.light_color = Color(1.0, 0.95, 0.86)
 	sun.light_energy = 1.5
 	sun.shadow_blur = 1.5
-	tree_mat.shader = SWAY
-	wire_mat.shader = SWAY
-	wire_mat.set_shader_parameter("view", 4)
-	tree_mat.set_shader_parameter("toon", float(shading))
+	var wire_shader := Shader.new()
+	wire_shader.code = WIRE
+	wire_mat.shader = wire_shader
 	# the floor: an editor grid, and a turntable to stand the tree on
 	var floor_mesh := PlaneMesh.new()
 	floor_mesh.size = Vector2(240, 240)
@@ -137,16 +142,14 @@ func build() -> void:
 	# or the painted wood's floor: leaf litter, with leaves lying on it
 	litter_mat.shader = LITTER
 	litter_mat.set_shader_parameter("sun_color", SUN_COLOR)
+	litter_mat.set_shader_parameter("litter_a", Color(0.62, 0.36, 0.14))
+	litter_mat.set_shader_parameter("litter_c", Color(0.72, 0.52, 0.2))
 	litter_floor.mesh = floor_mesh
 	litter_floor.material_override = litter_mat
 	litter_floor.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	world.add_child(litter_floor)
 	world.add_child(lying)
-	var sun_dir := SUN_DIR.normalized()
-	bark_mat = Woodland.material(Woodland.BARK, sun_dir, SUN_COLOR, {"moss": 0.6})
-	birch_mat = Woodland.material(Woodland.BARK, sun_dir, SUN_COLOR, {"birch": 1.0})
-	foliage_mat = Woodland.material(Woodland.FOLIAGE, sun_dir, SUN_COLOR)
-	lying_mat = Woodland.material(Woodland.LEAF, sun_dir, SUN_COLOR)
+	lying_mat = Woodland.material(Woodland.LEAF, SUN_DIR.normalized(), SUN_COLOR)
 	var plinth := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 2.4
@@ -182,8 +185,9 @@ func build() -> void:
 	wire.material_override = wire_mat
 	turntable.add_child(wire)
 	world.add_child(forest)
+	species = names.find("Oak")
+	gen = TreeGen.preset("Oak")
 	_apply_ground()
-	_apply_season()
 	_rebuild()
 	_frame()
 
@@ -191,41 +195,33 @@ func build() -> void:
 func controls() -> Array:
 	var c: Array = [
 		{type = "section", label = "Preset"},
-		{type = "choice", label = "Species", options = SPECIES, value = species, on = func(i: int) -> void:
-			var was := _family()
-			species = i
-			_touch()
-			_rebuild()
-			_frame()
-			if _family() != was:
-				controls_changed.emit()},
+		{type = "choice", label = "Species", options = names, value = species, on = _pick_index},
 		{type = "slider", label = "Seed", min = 1, max = 9999, step = 1, value = tree_seed, fmt = "%d",
 			on = func(v: float) -> void: tree_seed = int(v); _touch()},
 		{type = "button", label = "Randomize", on = _randomize},
-		{type = "button", label = "Reset", on = _reset},
-		{type = "section", label = "Trunk"},
-		_mod("Height", "height", 0.5, 1.6),
-		_mod("Girth", "girth", 0.5, 2.0),
-		_offset("Lean", "lean", 0.0, 0.3),
-		{type = "section", label = "Crown"},
-		_mod("Width", "width", 0.5, 1.7),
-		_offset("Base", "base", -0.3, 0.3),
-		_mod("Branches", "branches", 0.4, 2.0),
-		_offset("Droop", "droop", -0.6, 1.0),
-		_offset("Wildness", "wild", -0.4, 0.6),
-		{type = "section", label = "Leaves"},
-		_mod("Clump size", "foliage", 0.5, 1.7),
-		_mod("Detail", "detail", 0.0, 2.0),
-		_offset("Autumn", "autumn", 0.0, 1.0),
-		_offset("Snow", "snow", 0.0, 1.0),
+		{type = "button", label = "Reset", on = func() -> void:
+			if not _is_bush():
+				gen.apply_preset(names[species])
+			palette = 0
+			autumn = 0.0
+			_touch()
+			controls_changed.emit()},
+	]
+	if _is_bush():
+		c.append_array([
+			{type = "section", label = "Bush"},
+			{type = "choice", label = "Bush", options = BUSH_NAMES, value = bush_kind, on = func(i: int) -> void:
+				bush_kind = i
+				_touch()},
+		])
+	else:
+		c.append_array(_tree_rows())
+	c.append_array([
 		{type = "section", label = "Wind"},
 		{type = "slider", label = "Strength", min = 0.0, max = 1.5, step = 0.05, value = wind, fmt = "%.2f",
-			on = func(v: float) -> void:
-				wind = v
-				_set_all("wind", v)
-				foliage_mat.set_shader_parameter("sway", v / 0.35)
-				if _made:
-					_apply_tree_material()},
+			on = func(v: float) -> void: wind = v; _apply_uniforms()},
+		{type = "slider", label = "Turbulence", min = 0.0, max = 1.0, step = 0.05, value = turbulence, fmt = "%.2f",
+			on = func(v: float) -> void: turbulence = v; _apply_uniforms()},
 		{type = "section", label = "Scene"},
 		{type = "choice", label = "Ground", options = ["Grid", "Leaf litter"], value = floor_kind, on = func(i: int) -> void:
 			floor_kind = i
@@ -238,88 +234,184 @@ func controls() -> Array:
 			_still = FOREST_WAIT},
 		{type = "button", label = "Frame", on = _frame},
 		{type = "section", label = "Display"},
-		{type = "choice", label = "Shading", options = ["Soft", "Toon"], value = shading,
+		{type = "choice", label = "Shading", options = ["Soft", "Toon"], value = 1 if gen.toon > 0.5 else 0,
 			on = func(i: int) -> void:
-				shading = i
-				tree_mat.set_shader_parameter("toon", float(i))},
+				gen.toon = float(i)
+				_touch()},
 		{type = "choice", label = "View", options = ["Shaded", "Normals", "Sway", "Wire"], value = view,
 			on = func(i: int) -> void:
 				view = i
 				_apply_view()},
-	]
-	# the painted trees' own settings, after Trunk/Crown/Leaves; a bush's kind
-	var at := 0
-	while at < c.size() and not (c[at].type == "section" and c[at].label == "Wind"):
-		at += 1
-	if _is_bush():
-		c.insert(at, {type = "choice", label = "Bush", options = BUSH_NAMES, value = bush_kind, on = func(i: int) -> void:
-			bush_kind = i
-			_touch()})
-		c.insert(at, {type = "section", label = "Painted"})
-	elif _is_painted():
-		var painted_rows: Array = [
-			{type = "section", label = "Painted"},
-			{type = "choice", label = "Leaf", options = LEAF_NAMES, value = leaf_kind, on = func(i: int) -> void:
-				leaf_kind = i
-				_touch()},
-			{type = "slider", label = "Season", min = 0.0, max = 2.0, step = 0.05, value = season, fmt = "%.2f",
-				on = func(v: float) -> void:
-					season = v
-					_apply_season()},
-			_mod("Roots", "roots", 0.0, 2.0),
-			_offset("Swirl", "swirl", -0.8, 1.2),
-		]
-		for k in painted_rows.size():
-			c.insert(at + k, painted_rows[k])
-	c.append_array(Exporter.controls("%s %d" % [SPECIES[species], tree_seed], _export, "trees",
+	])
+	c.append_array(Exporter.controls("%s %d" % [names[species], tree_seed], _export, "trees",
 		func(t: String) -> void: say.emit(t)))
 	return c
 
 
+## The generator's settings, by section; the leaf style's own settings only for that style.
+func _tree_rows() -> Array:
+	var rows: Array = [
+		{type = "section", label = "Trunk"},
+		_slider("Height", "height", 1.0, 30.0, 0.1, "%.1f", " m"),
+		_slider("Girth", "trunk_radius", 0.04, 1.2, 0.01, "%.2f", " m"),
+		_slider("Trunk base", "trunk_base", 0.0, 0.9),
+		_slider("Lean", "lean", 0.0, 0.8),
+		_slider("Bend", "bend", 0.0, 1.0),
+		_slider("Root flare", "root_flare", 0.0, 2.0),
+		_slider("Roots", "roots", 0, 12, 1, "%d"),
+		{type = "section", label = "Branching"},
+		_slider("Levels", "levels", 1, 4, 1, "%d"),
+		_slider("Branches", "children", 1, 150, 1, "%d"),
+		_slider("Twigs", "twigs", 0, 24, 1, "%d"),
+		_slider("Count random", "children_random", 0.0, 1.0),
+		_slider("Whorl", "whorl", 1, 12, 1, "%d"),
+		{type = "toggle", label = "Golden angle", value = gen.golden_angle, on = func(on: bool) -> void:
+			gen.golden_angle = on
+			_touch()},
+		_slider("Angle", "branch_angle", 0.0, 150.0, 1.0, "%d", " deg"),
+		_slider("Twig angle", "twig_angle", 0.0, 150.0, 1.0, "%d", " deg"),
+		_slider("Angle random", "angle_random", 0.0, 60.0, 1.0, "%d", " deg"),
+		_slider("Length", "length", 0.02, 1.5),
+		_slider("Twig length", "twig_length", 0.05, 1.2),
+		_slider("Radius ratio", "radius_ratio", 0.1, 1.0),
+		_slider("Twigs from", "start", 0.0, 1.0),
+		_slider("Twigs to", "end", 0.0, 1.0),
+		_slider("Apical dominance", "apical", 0.0, 1.0),
+		_slider("Gravitropism", "gravitropism", -1.0, 1.0, 0.02, "%+.2f"),
+		_slider("Droop", "droop", 0.0, 1.5),
+		_slider("Weep", "weep", 0.0, 1.0),
+		_slider("Curl", "curl", 0.0, 1.5),
+		_slider("Twist", "twist", -1.0, 1.0, 0.02, "%+.2f"),
+		_slider("Wildness", "wildness", 0.0, 1.0),
+		{type = "section", label = "Crown"},
+		{type = "choice", label = "Shape", options = SHAPES, value = gen.crown_shape, on = func(i: int) -> void:
+			gen.crown_shape = i
+			_touch()},
+		_slider("Spread", "spread", 0.2, 3.0),
+		_slider("Fill", "fill", 0.0, 1.0),
+		{type = "section", label = "Leaves"},
+		{type = "choice", label = "Style", options = STYLES, value = gen.leaf_style, on = func(i: int) -> void:
+			gen.leaf_style = i
+			_touch()
+			controls_changed.emit()},
+	]
+	if gen.leaf_style != TreeGen.Leaves.NONE:
+		rows.append_array([
+			_slider("Clump size", "clump_size", 0.05, 3.0, 0.01, "%.2f", " m"),
+			_slider("Density", "leaf_density", 0.0, 4.0),
+			_slider("Reach", "leaf_reach", 0.0, 1.0),
+			{type = "choice", label = "Colours", options = PALETTES.keys(), value = palette, on = func(i: int) -> void:
+				palette = i
+				var cols: Array = PALETTES.values()[i]
+				if cols.is_empty():
+					var p := TreeGen.preset(names[species])
+					cols = [p.leaves_inner, p.leaves_outer, p.leaves_tips]
+				gen.leaves_inner = cols[0]
+				gen.leaves_outer = cols[1]
+				gen.leaves_tips = cols[2]
+				_touch()},
+			{type = "slider", label = "Autumn", min = 0.0, max = 1.0, step = 0.02, value = autumn, fmt = "%.2f",
+				on = func(v: float) -> void: autumn = v; _touch()},
+			_slider("Dapple", "dapple", 0.0, 1.0),
+			{type = "slider", label = "Accent", min = 0.0, max = 0.5, step = 0.01, value = gen.accent.a, fmt = "%.2f",
+				on = func(v: float) -> void: gen.accent.a = v; _touch()},
+			_slider("Snow", "snow", 0.0, 1.0),
+			_slider("Rim light", "rim", 0.0, 1.0),
+		])
+	match gen.leaf_style:
+		TreeGen.Leaves.FLUFFY:
+			rows.append_array([
+				{type = "section", label = "Fluffy cards"},
+				{type = "choice", label = "Leaf", options = ["Broad", "Narrow"], value = gen.fluffy_leaf, on = func(i: int) -> void:
+					gen.fluffy_leaf = i
+					_touch()},
+				_slider("Card size", "card_size", 0.2, 3.0),
+				_slider("Cards", "cards", 0.1, 3.0),
+				_slider("Billboard", "billboard", 0.0, 1.0),
+				_slider("Normal bend", "normal_bend", 0.0, 1.0),
+				_slider("Alpha cut", "alpha_cut", 0.05, 0.95),
+			])
+		TreeGen.Leaves.PAINTED:
+			rows.append_array([
+				{type = "section", label = "Painted cards"},
+				{type = "choice", label = "Leaf", options = PAINTED_LEAVES, value = gen.painted_leaf, on = func(i: int) -> void:
+					gen.painted_leaf = i
+					_touch()},
+				_slider("Card size", "card_size", 0.2, 3.0),
+				_slider("Cards", "cards", 0.1, 3.0),
+				_slider("Normal bend", "normal_bend", 0.0, 1.0),
+			])
+		TreeGen.Leaves.NEEDLES:
+			rows.append_array([
+				{type = "section", label = "Needles"},
+				_slider("Needle density", "needle_density", 0.4, 2.5),
+				_slider("Sprigs", "sprigs", 0, 4, 1, "%d"),
+				_slider("Fullness", "fullness", 0.1, 0.9),
+				_slider("Alpha cut", "alpha_cut", 0.05, 0.95),
+			])
+		TreeGen.Leaves.BLOBS:
+			rows.append_array([
+				{type = "section", label = "Blobs"},
+				_slider("Lumpiness", "lumpiness", 0.0, 1.0),
+				_slider("Tufts", "tufts", 0, 14, 1, "%d"),
+			])
+	return rows
+
+
+## A slider straight onto one of the generator's settings.
+func _slider(label: String, key: String, lo: float, hi: float, step := 0.01, fmt := "%.2f", unit := "") -> Dictionary:
+	var whole := typeof(gen.get(key)) == TYPE_INT
+	return {type = "slider", label = label, min = lo, max = hi, step = step, value = float(gen.get(key)), fmt = fmt,
+		unit = unit, on = func(v: float) -> void:
+			gen.set(key, roundi(v) if whole else v)
+			_touch()}
+
+
 # --- export ----------------------------------------------------------------------
 
-## Sends the tree on the turntable (never the forest) to the asset library. A pine or broadleaf
-## goes as its generator (a PineTree / LeafyTree .tres: the same settings make the same tree in
-## any project with the component), its baked mesh, and a .glb for Blender and other tools. A
-## painted tree or a bush goes as a scene (its trunk and leaf clumps with the kit's materials,
-## lit from the lab's sun), the settings it was made from, and a .glb.
+## Sends the tree on the turntable (never the forest) to the asset library: its generator (a TreeGen
+## .tres: the same settings make the same tree in any project with godot/tree), its baked mesh, and a
+## .glb for Blender and other tools (vertex colours, the cards as plain quads). A bush goes as a scene
+## (the kit's material, lit from the lab's sun), its settings and a .glb.
 func _export(asset_name: String) -> void:
 	var file := Exporter.slug(asset_name)
-	if _is_painted() or _is_bush():
+	if _is_bush():
 		var scene := Node3D.new()
 		scene.name = asset_name.to_pascal_case().validate_node_name()
-		if tree.visible and tree.mesh:
-			var trunk := MeshInstance3D.new()
-			trunk.name = "Trunk"
-			trunk.mesh = tree.mesh
-			trunk.material_override = tree.material_override
-			scene.add_child(trunk)
 		for child in painted.get_children():
-			var copy := child.duplicate()
-			scene.add_child(copy)
-		var settings := {species = SPECIES[species], seed = tree_seed, mods = mods, leaf = LEAF_NAMES[leaf_kind],
-			season = season, bush = BUSH_NAMES[bush_kind], sun_dir = [SUN_DIR.x, SUN_DIR.y, SUN_DIR.z]}
-		var glb := _glb(scene)
-		say.emit(Exporter.save("trees", asset_name, {"tscn": scene, "glb": glb, "json": JSON.stringify(settings, "  ")},
+			scene.add_child(child.duplicate())
+		var settings := {bush = BUSH_NAMES[bush_kind], seed = tree_seed, sun_dir = [SUN_DIR.x, SUN_DIR.y, SUN_DIR.z]}
+		say.emit(Exporter.save("trees", asset_name, {"tscn": scene, "glb": _glb(scene), "json": JSON.stringify(settings, "  ")},
 			["godot/painted-woodland"],
-			"var tree := (load(\"res://assets/trees/%s.tscn\") as PackedScene).instantiate()\nadd_child(tree)\n" % file
-			+ "# lit by hand from the sun in %s.json (sun_dir): for another sun, set each material's sun_dir" % file,
+			"var bush := (load(\"res://assets/trees/%s.tscn\") as PackedScene).instantiate()\nadd_child(bush)\n" % file
+			+ "# lit by hand from the sun in %s.json (sun_dir): for another sun, set its material's sun_dir" % file,
 			"Tree Lab"))
 		scene.free()
 		return
 	var made := _make()
-	made.material = null # drawn by the component's own shader in the project, as in any game
-	var shown: MeshInstance3D = made.instance()
+	# the baked mesh goes without its materials (they hold a texture made at start-up): dress() gives them back
+	var baked: ArrayMesh = made.mesh().duplicate()
+	for i in baked.get_surface_count():
+		baked.surface_set_material(i, null)
 	var holder := Node3D.new()
 	holder.name = asset_name.to_pascal_case().validate_node_name()
+	var shown := MeshInstance3D.new()
+	shown.mesh = baked
+	var plain := StandardMaterial3D.new()
+	plain.vertex_color_use_as_albedo = true
+	plain.vertex_color_is_srgb = true
+	plain.roughness = 1.0
+	shown.material_override = plain
 	holder.add_child(shown)
-	var cls := "PineTree" if _is_pine() else "LeafyTree"
-	var use := "var tree := (load(\"res://assets/trees/%s.tres\") as %s).instance()   # from its settings\n" % [file, cls]
+	var needs := ["godot/tree"]
+	if made.leaf_style == TreeGen.Leaves.PAINTED:
+		needs.append("godot/painted-woodland") # its real leaf shapes (without it, TreeGen's own clusters)
+	var use := "var tree := (load(\"res://assets/trees/%s.tres\") as TreeGen).instance()   # from its settings\n" % file
 	use += "add_child(tree)\n"
-	use += "# or a whole wood: %s.forest(self, points, load(\"res://assets/trees/%s.tres\"))\n" % [cls, file]
-	use += "# or the baked mesh: var mi := MeshInstance3D.new(); mi.mesh = load(\"res://assets/trees/%s.mesh.res\")" % file
-	say.emit(Exporter.save("trees", asset_name, {"tres": made, "mesh.res": shown.mesh, "glb": _glb(holder)},
-		["godot/pine-tree" if _is_pine() else "godot/leafy-tree"], use, "Tree Lab"))
+	use += "# or a whole wood: TreeGen.forest(self, points, load(\"res://assets/trees/%s.tres\"))\n" % file
+	use += "# or the baked mesh: var mi := MeshInstance3D.new(); mi.mesh = load(\"res://assets/trees/%s.mesh.res\")\n" % file
+	use += "#   (load(\"res://assets/trees/%s.tres\") as TreeGen).dress(mi)" % file
+	say.emit(Exporter.save("trees", asset_name, {"tres": made, "mesh.res": baked, "glb": _glb(holder)}, needs, use, "Tree Lab"))
 	holder.free()
 
 
@@ -333,33 +425,25 @@ func _glb(node: Node) -> PackedByteArray:
 	return doc.generate_buffer(state)
 
 
-## Which panel a species wants: 0 the cel-shaded trees, 1 the painted trees, 2 a bush.
-func _family() -> int:
-	return 2 if _is_bush() else (1 if _is_painted() else 0)
+## Shows a species (a TreeGen preset, or Bush) by name, as the Species choice does.
+func pick(species_name: String) -> void:
+	_pick_index(maxi(names.find(species_name), 0))
 
 
-func _is_painted() -> bool:
-	return species >= FIRST_PAINTED
+func _pick_index(i: int) -> void:
+	species = i
+	if not _is_bush():
+		gen.apply_preset(names[i])
+		palette = 0
+		autumn = 0.0
+	_touch()
+	_rebuild()
+	_frame()
+	controls_changed.emit()
 
 
 func _is_bush() -> bool:
-	return SPECIES[species] == "Bush"
-
-
-## A slider that scales a setting of the preset (100% is the preset's own).
-func _mod(label: String, key: String, lo: float, hi: float) -> Dictionary:
-	return {type = "slider", label = label, min = lo * 100.0, max = hi * 100.0, step = 5, value = mods[key] * 100.0,
-		fmt = "%d", unit = "%", on = func(v: float) -> void:
-			mods[key] = v / 100.0
-			_touch()}
-
-
-## A slider that adds to a setting of the preset.
-func _offset(label: String, key: String, lo: float, hi: float) -> Dictionary:
-	return {type = "slider", label = label, min = lo, max = hi, step = 0.02, value = mods[key], fmt = "%+.2f",
-		on = func(v: float) -> void:
-			mods[key] = v
-			_touch()}
+	return names[species] == BUSH
 
 
 func _touch() -> void:
@@ -372,17 +456,6 @@ func _touch() -> void:
 func _randomize() -> void:
 	tree_seed = randi_range(1, 9999)
 	_touch()
-
-
-func _reset() -> void:
-	for k in mods:
-		mods[k] = 0.0 if k in ["base", "droop", "wild", "lean", "autumn", "snow"] else 1.0
-	_touch()
-
-
-func _set_all(param: String, value: Variant) -> void:
-	tree_mat.set_shader_parameter(param, value)
-	wire_mat.set_shader_parameter(param, value)
 
 
 func _process(delta: float) -> void:
@@ -399,63 +472,15 @@ func _process(delta: float) -> void:
 
 # --- making the tree ---------------------------------------------------------
 
-func _is_pine() -> bool:
-	return species < PINES.size()
-
-
-## The current species with the modifiers applied, as a PineTree or LeafyTree.
-func _make() -> Resource:
-	var m := mods
-	if _is_pine():
-		var p := PineTree.new()
-		var preset: Dictionary = PINES[species]
-		for k in preset:
-			p.set(k, preset[k])
-		p.height *= m.height
-		p.trunk_radius *= m.girth
-		p.spread = clampf(p.spread * m.width, 0.15, 1.0)
-		p.crown_base = clampf(p.crown_base + m.base, 0.0, 0.8)
-		p.whorls = clampi(roundi(p.whorls * m.branches), 3, 30)
-		p.branches = clampi(roundi(p.branches * lerpf(1.0, m.branches, 0.5)), 3, 14)
-		p.droop = clampf(p.droop + m.droop, 0.0, 1.0)
-		p.fullness = clampf(p.fullness * m.foliage, 0.1, 0.8)
-		p.sprigs = clampi(roundi(p.sprigs * m.detail), 0, 4)
-		p.wildness = clampf(p.wildness + m.wild, 0.0, 1.0)
-		p.lean = clampf(p.lean + m.lean, 0.0, 0.3)
-		p.snow = clampf(p.snow + m.snow, 0.0, 1.0)
-		# autumn on a conifer: a larch going gold
-		p.needles_inner = p.needles_inner.lerp(Color(0.32, 0.2, 0.07), m.autumn)
-		p.needles_outer = p.needles_outer.lerp(Color(0.72, 0.5, 0.14), m.autumn)
-		p.tips = p.tips.lerp(Color(0.92, 0.7, 0.25), m.autumn)
-		p.seed = tree_seed
-		return p
-	var t: LeafyTree
-	match SPECIES[species]:
-		"Aspen": t = LeafyTree.aspen()
-		"Cottonwood": t = LeafyTree.cottonwood()
-		"Willow": t = LeafyTree.willow()
-		"Pinyon": t = LeafyTree.pinyon()
-		_: t = LeafyTree.oak()
-	t.height *= m.height
-	t.trunk_radius *= m.girth
-	t.spread = clampf(t.spread * m.width, 0.15, 1.6)
-	t.crown_base = clampf(t.crown_base + m.base, 0.05, 0.9)
-	t.limbs = clampi(roundi(t.limbs * lerpf(1.0, m.branches, 0.6)), 1, 7)
-	t.clumps = clampi(roundi(t.clumps * m.branches), 3, 48)
-	t.weep = clampf(t.weep + m.droop, 0.0, 1.0)
-	t.clump_size = clampf(t.clump_size * m.foliage, 0.12, 0.7)
-	t.tufts = clampi(roundi(t.tufts * m.detail), 0, 14)
-	t.wildness = clampf(t.wildness + m.wild, 0.0, 1.0)
-	t.lean = clampf(t.lean + m.lean, 0.0, 0.3)
-	t.leaves_dark = t.leaves_dark.lerp(Color(0.38, 0.13, 0.04), m.autumn)
-	t.leaves = t.leaves.lerp(Color(0.84, 0.4, 0.1), m.autumn)
-	t.leaves_light = t.leaves_light.lerp(Color(1.0, 0.74, 0.24), m.autumn)
-	if m.autumn > 0.0:
-		t.accent = Color(0.72, 0.12, 0.06, maxf(t.accent.a, m.autumn * 0.3))
-	# snow on a broadleaf: a frost settling on the light tops
-	t.leaves_light = t.leaves_light.lerp(Color(0.92, 0.95, 1.0), m.snow * 0.8)
+## The tree as set, with the seed and the Autumn slider applied.
+func _make() -> TreeGen:
+	var t: TreeGen = gen.duplicate()
 	t.seed = tree_seed
-	t.material = tree_mat
+	if autumn > 0.0:
+		var fall: Array = PALETTES["Autumn"]
+		t.leaves_inner = t.leaves_inner.lerp(fall[0], autumn)
+		t.leaves_outer = t.leaves_outer.lerp(fall[1], autumn)
+		t.leaves_tips = t.leaves_tips.lerp(fall[2], autumn)
 	return t
 
 
@@ -464,90 +489,25 @@ func _rebuild() -> void:
 	_since = 0.0
 	for child in painted.get_children():
 		child.free()
-	_clumps = 0
 	var t0 := Time.get_ticks_usec()
 	if _is_bush():
 		_made = null
 		_build_bush()
-	elif _is_painted():
-		_made = null
-		_build_painted()
 	else:
-		# every slider step is a new key in the components' mesh caches: keep only what is in use
-		PineTree.clear_cache()
-		LeafyTree.clear_cache()
+		# every slider step is a new key in the component's caches: keep only what is in use
+		TreeGen.clear_cache()
 		_made = _make()
 		tree.mesh = _made.mesh()
-		_apply_tree_material()
-		_height = _made.height
-		_set_all("pine", 1.0 if _is_pine() else 0.0)
-		_set_all("tree_height", _made.height)
+		_height = maxf(_made.built_height, 1.0)
 	tree.visible = not _is_bush()
 	_build_ms = (Time.get_ticks_usec() - t0) / 1000.0
 	_tris = _count(tree.mesh) if tree.visible else 0
 	for g in painted.find_children("*", "MeshInstance3D", false, false):
 		_tris += _count((g as MeshInstance3D).mesh)
 	_clumps_to_pools()
+	_apply_uniforms()
 	if view == 3:
 		_build_wire()
-
-
-# --- the painted trees (the painted-woodland kit) ------------------------------
-
-## The kit's shape for this seed (as Woodland.variant() would draw it), bent by the sliders.
-func _painted_shape(kind: String, seed: int) -> Dictionary:
-	var m := mods
-	var r := RandomNumberGenerator.new()
-	r.seed = seed
-	var s: Dictionary = Woodland._shape(kind, r, false)
-	s.erase("lite") # variant() makes the full and the lite tree itself
-	s.height *= m.height
-	s.radius *= m.girth
-	s.reach *= m.width
-	s.lean = clampf(s.lean + m.lean * 2.0, 0.0, 0.9)
-	s.branches = clampi(roundi(s.branches * m.branches), 1, 12)
-	s.roots = clampi(roundi(s.roots * m.roots), 0, 12)
-	s.curl = maxf(s.curl + m.swirl, 0.0)
-	s.twist = maxf(s.twist + m.swirl * 0.08, 0.0)
-	s.flute = clampf(s.flute * (1.0 + m.wild * 2.0), 0.0, 0.3)
-	return s
-
-
-func _painted_variant(seed: int) -> Dictionary:
-	var kind: String = PAINTED[SPECIES[species]]
-	var v := Woodland.variant(kind, seed, _painted_shape(kind, seed))
-	if leaf_kind > 0:
-		v.leaf = leaf_kind - 1
-	return v
-
-
-## Leaf clumps round a painted tree's crown points, bigger or smaller with Clump size.
-func _painted_cards(v: Dictionary, tr: Transform3D, rng: RandomNumberGenerator, per_crown: int, out: Array) -> void:
-	if v.bare:
-		return
-	var from := out.size()
-	Woodland.crown_cards(v, tr, rng, per_crown, out)
-	for k in range(from, out.size()):
-		var c: Color = out[k][1]
-		c.r *= mods.foliage
-		out[k][1] = c
-
-
-func _build_painted() -> void:
-	var v := _painted_variant(tree_seed)
-	tree.mesh = v.full
-	tree.material_override = birch_mat if v.kind == "aspen" else bark_mat
-	var rng := RandomNumberGenerator.new()
-	rng.seed = tree_seed
-	var cards: Array = []
-	_painted_cards(v, Transform3D.IDENTITY, rng, clampi(roundi(3 * mods.detail), 1, 6), cards)
-	if not cards.is_empty():
-		Woodland.add_leaf_clumps(painted, cards, foliage_mat)
-	_clumps = cards.size()
-	_height = 0.0
-	for c: Vector4 in v.crowns:
-		_height = maxf(_height, c.y + c.w)
-	_height = maxf(_height, 4.0)
 
 
 func _build_bush() -> void:
@@ -560,9 +520,8 @@ func _build_bush() -> void:
 	var params: Dictionary = info.colors.duplicate()
 	params["shape"] = info.shape
 	mi.material_override = Woodland.material(Woodland.LEAF3D, SUN_DIR.normalized(), SUN_COLOR, params)
-	mi.scale = Vector3(mods.width, mods.height, mods.width)
 	painted.add_child(mi)
-	_height = info.size.y * 2.0 * mods.height
+	_height = info.size.y * 2.0
 
 
 ## The pools of shade on the leaf litter, under the tree's crown.
@@ -573,22 +532,6 @@ func _clumps_to_pools() -> void:
 	pools[0] = Vector4(0, 0, reach, 0)
 	litter_mat.set_shader_parameter("trees", pools)
 	litter_mat.set_shader_parameter("tree_count", 1)
-
-
-## 0 summer, 1 autumn (the kit's own colours), 2 late autumn: the painted leaves and the litter.
-func _apply_season() -> void:
-	var summer := [Color(0.55, 0.62, 0.22), Color(0.36, 0.5, 0.16), Color(0.22, 0.36, 0.12)]
-	var autumn := [Color(0.93, 0.68, 0.24), Color(0.84, 0.43, 0.13), Color(0.52, 0.24, 0.1)]
-	var late := [Color(0.66, 0.44, 0.2), Color(0.52, 0.28, 0.12), Color(0.33, 0.18, 0.09)]
-	var keys := ["gold", "orange", "rust"]
-	for i in 3:
-		var col: Color = summer[i].lerp(autumn[i], clampf(season, 0.0, 1.0)) if season <= 1.0 \
-			else autumn[i].lerp(late[i], season - 1.0)
-		foliage_mat.set_shader_parameter(keys[i], col)
-		lying_mat.set_shader_parameter(keys[i], col)
-	var lit := clampf(season, 0.0, 1.0)
-	litter_mat.set_shader_parameter("litter_a", Color(0.35, 0.36, 0.15).lerp(Color(0.62, 0.36, 0.14), lit))
-	litter_mat.set_shader_parameter("litter_c", Color(0.45, 0.45, 0.2).lerp(Color(0.72, 0.52, 0.2), lit))
 
 
 ## The editor grid with the tree on its turntable, or the painted wood's leaf litter with the tree
@@ -614,10 +557,12 @@ func _apply_ground() -> void:
 
 
 func _count(mesh: Mesh) -> int:
-	if not mesh or mesh.get_surface_count() == 0:
-		return 0
-	var idx: int = mesh.surface_get_array_index_len(0)
-	return (idx if idx > 0 else mesh.surface_get_array_len(0)) / 3
+	var n := 0
+	if mesh:
+		for s in mesh.get_surface_count():
+			var idx: int = mesh.surface_get_array_index_len(s)
+			n += (idx if idx > 0 else mesh.surface_get_array_len(s)) / 3
+	return n
 
 
 func _frame() -> void:
@@ -631,54 +576,59 @@ func _frame() -> void:
 # --- views -------------------------------------------------------------------
 
 func _apply_view() -> void:
-	tree_mat.set_shader_parameter("view", view)
 	wire.visible = view == 3
 	if view == 3:
 		_build_wire()
-	if _made:
-		_apply_tree_material()
+	_apply_uniforms()
 
 
-## What a game gets: a pine is drawn by PineTree's own needle shader (its forest too). Leafy trees
-## have no wind shader of their own (LeafyTree's README leaves that to the game), so they take the
-## lab's sway material, as a game's would. The debug views (Normals, Sway, Wire) override either.
-func _apply_tree_material() -> void:
-	if _is_pine() and view == 0:
-		var own := _made._material() as ShaderMaterial
-		tree.material_override = own
-		if own:
-			own.set_shader_parameter("sway", clampf(wind * 0.115, 0.0, 0.3))
-	else:
-		tree.material_override = tree_mat
+## Every material the tree and the forest are drawn with: the wind, and the debug view.
+func _apply_uniforms() -> void:
+	var meshes: Array[Mesh] = []
+	if tree.mesh:
+		meshes.append(tree.mesh)
+	for node in forest.get_children():
+		if node is MultiMeshInstance3D and node.multimesh:
+			meshes.append(node.multimesh.mesh)
+	var debug := view if view < 3 else 3
+	for m in meshes:
+		for s in m.get_surface_count():
+			var mat := m.surface_get_material(s) as ShaderMaterial
+			if mat:
+				mat.set_shader_parameter("wind", wind)
+				mat.set_shader_parameter("turbulence", turbulence)
+				mat.set_shader_parameter("debug_view", debug)
+	wire_mat.set_shader_parameter("wind", wind)
+	wire_mat.set_shader_parameter("turbulence", turbulence)
 
 
 ## The tree's triangles as lines, carrying UV2 so they sway with it.
 func _build_wire() -> void:
-	var arrays := tree.mesh.surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var uv2_in = arrays[Mesh.ARRAY_TEX_UV2]
-	var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
-	var tri_count := (index.size() if index.size() > 0 else verts.size()) / 3
+	if not tree.mesh or not tree.visible:
+		wire.mesh = null
+		return
 	var lv := PackedVector3Array()
 	var lu := PackedVector2Array()
-	lv.resize(tri_count * 6)
-	lu.resize(tri_count * 6)
-	var has_uv2: bool = uv2_in != null and (uv2_in as PackedVector2Array).size() == verts.size()
-	var n := 0
-	for t in tri_count:
-		for e in 3:
-			for s in 2:
-				var k := t * 3 + (e + s) % 3
-				var vi := index[k] if index.size() > 0 else k
-				lv[n] = verts[vi]
-				lu[n] = uv2_in[vi] if has_uv2 else Vector2.ZERO
-				n += 1
+	for surface in tree.mesh.get_surface_count():
+		var arrays := tree.mesh.surface_get_arrays(surface)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var uv2: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2] if arrays[Mesh.ARRAY_TEX_UV2] != null else PackedVector2Array()
+		var index: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var tri_count := (index.size() if index.size() > 0 else verts.size()) / 3
+		for t in tri_count:
+			for e in 3:
+				for s in 2:
+					var k := t * 3 + (e + s) % 3
+					var vi := index[k] if index.size() > 0 else k
+					lv.append(verts[vi])
+					lu.append(uv2[vi] if vi < uv2.size() else Vector2.ZERO)
 	var out := []
 	out.resize(Mesh.ARRAY_MAX)
 	out[Mesh.ARRAY_VERTEX] = lv
 	out[Mesh.ARRAY_TEX_UV2] = lu
 	var lines := ArrayMesh.new()
-	lines.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, out)
+	if lv.size() > 0:
+		lines.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, out)
 	wire.mesh = lines
 
 
@@ -713,36 +663,8 @@ func _build_forest() -> void:
 	if _is_bush():
 		_bush_forest(points)
 		return
-	if _is_painted():
-		_painted_forest(points)
-		return
-	var made: Array
-	if _is_pine():
-		made = PineTree.forest(forest, points, _made, 3, Vector2(0.7, 1.2), 64.0, 26.0)
-	else:
-		made = LeafyTree.forest(forest, points, _made, 3, Vector2(0.7, 1.2), 64.0, 26.0)
-	_forest_draws = made.size()
-
-
-## A painted wood: three shapes of the tree from neighbouring seeds, full near and lite far, as the
-## kit draws its woods (Woodland.add_trees, in squares), with their leaf clumps.
-func _painted_forest(points: Array) -> void:
-	var variants: Array = []
-	for k in 3:
-		variants.append(_painted_variant(tree_seed + 1 + k * 17))
-	var rng := RandomNumberGenerator.new()
-	rng.seed = tree_seed + 5
-	var cards: Array = []
-	for p: Vector3 in points:
-		var v: Dictionary = variants[rng.randi() % variants.size()]
-		var tr := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * rng.randf_range(0.8, 1.15)), p)
-		var near := p.length() < 26.0
-		v["near" if near else "far"].append(tr)
-		_painted_cards(v, tr, rng, 2 if near else 1, cards)
-	Woodland.add_trees(forest, variants, bark_mat, birch_mat)
-	if not cards.is_empty():
-		Woodland.add_leaf_clumps(forest, cards, foliage_mat)
-	_forest_draws = forest.get_child_count()
+	_forest_draws = TreeGen.forest(forest, points, _made, 3, Vector2(0.7, 1.2), 64.0, 26.0).size()
+	_apply_uniforms()
 
 
 ## Bushes scattered round: one MultiMesh of the current bush.

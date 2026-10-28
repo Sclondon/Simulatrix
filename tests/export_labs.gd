@@ -63,8 +63,8 @@ func _export(sim: Sim, kind: String, asset: String) -> void:
 func _run() -> void:
 	await _frames(5)
 	var s: Sim = await _open("Tree Lab")
-	for pick in [["Fir", "Lab Fir"], ["Oak", "Lab Oak"], ["Painted oak", "Lab Painted Oak"], ["Bush", "Lab Bush"]]:
-		s.species = s.SPECIES.find(pick[0])
+	for pick in [["Pine", "Lab Pine"], ["Oak", "Lab Oak"], ["Willow", "Lab Willow"], ["Painted oak", "Lab Painted Oak"], ["Bush", "Lab Bush"]]:
+		s.pick(pick[0])
 		s._touch()
 		s._rebuild()
 		await _frames(5)

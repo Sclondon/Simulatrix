@@ -22,12 +22,17 @@ const TONES := [
 	[Color(1.0, 0.62, 0.3), Color(0.86, 0.22, 0.06), Color(0.42, 0.04, 0.03)],
 ]
 const MAX_SMALL := 6
+const Sprites := preload("res://sims/vfx/particles/textures.gd")
 
 var preset := 3
 var tone := 0
 var scale_size := 1.0
 var settings := {lean = 0.0, speed = 1.0, ragged = 1.0, intensity = 1.0, halo = 0.22, flicker = 0.13,
-	embers = true, smoke = true, banded = true, light = true, light_shadows = false}
+	embers = true, smoke = true, banded = true, light = true, light_shadows = false, spark_size = 1.0}
+## What the sparks and smoke are drawn with: "" their own shapes, else a sprite id (a particle
+## sprite, or one drawn or imported on the shape pad, "user:<name>").
+var spark_id := ""
+var smoke_id := ""
 var fire: Fire
 var small: Array[Node3D] = [] # extra fires, each a stake of sticks with a Fire on it
 var base: Node3D # what the main fire stands on
@@ -274,8 +279,27 @@ func _dress(f: Fire) -> void:
 		if key == "flicker" and f != fire and preset == 0:
 			continue
 		f.set(key, settings[key])
+	f.spark_texture = _sprite(spark_id)
+	f.smoke_texture = _sprite(smoke_id)
 	if f != fire:
 		f.light_shadows = false
+
+
+static func _sprite(id: String) -> Texture2D:
+	if id == "":
+		return null
+	return ShapePad.texture(id, func(n: String) -> Texture2D:
+		return Sprites.get_texture(n if n in Sprites.NAMES else "soft"))
+
+
+func _set_sprite(which: String, id: String) -> void:
+	if which == "spark":
+		spark_id = id
+	else:
+		smoke_id = id
+	_dress(fire)
+	for s in small:
+		_dress(s.get_meta("fire"))
 
 
 func _apply(key: String, value: Variant) -> void:
@@ -371,6 +395,16 @@ func controls() -> Array:
 			on = func(v: float) -> void: _apply("ragged", v)},
 		{type = "toggle", label = "Sparks", value = settings.embers, on = func(on: bool) -> void: _apply("embers", on)},
 		{type = "toggle", label = "Smoke", value = settings.smoke, on = func(on: bool) -> void: _apply("smoke", on)},
+		{type = "section", label = "Sparks and smoke"},
+	])
+	var sprites := ShapePad.builtins(Sprites.NAMES, Sprites.LABELS, Sprites.get_texture)
+	c.append_array(ShapePad.picker_controls("Spark sprite", spark_id,
+		func(id: String) -> void: _set_sprite("spark", id), [{id = "", label = "Diamond", tex = null}] + sprites))
+	c.append({type = "slider", label = "Spark size", min = 0.5, max = 6.0, step = 0.1, value = settings.spark_size,
+		fmt = "%.1fx", on = func(v: float) -> void: _apply("spark_size", v)})
+	c.append_array(ShapePad.picker_controls("Smoke sprite", smoke_id,
+		func(id: String) -> void: _set_sprite("smoke", id), [{id = "", label = "Puff", tex = null}] + sprites))
+	c.append_array([
 		{type = "section", label = "Light"},
 		{type = "slider", label = "Flicker", min = 0.0, max = 0.5, step = 0.01, value = settings.flicker, fmt = "%.2f",
 			on = func(v: float) -> void: _apply("flicker", v)},
@@ -409,6 +443,8 @@ func help() -> String:
 	return ("GameCommon's Fire (scripts/fire.gd): each tongue of flame is a card turned to the camera, cut out of noise "
 		+ "streaming upwards in three tones, with sparks and smoke as one MultiMesh and a light that wavers on three "
 		+ "slow sines. No particles, no textures, two draw calls and a light per fire.\n\n"
+		+ "Sparks and smoke: draw them with a sprite instead of their own shapes (a built-in one, one you draw on the "
+		+ "pad, or an imported picture): white ones take the fire's colours. Spark size makes them bigger.\n\n"
 		+ "Finger on Poke: tap the ground to light a small fire (up to %d), drag one to move it. Every setting goes to "
 		+ "every fire. Shadows makes the big fire's light cast them (costly on phones).") % MAX_SMALL
 
