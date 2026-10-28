@@ -1176,8 +1176,8 @@ func _tube(buf: _Buf, pts: Array[Vector3], radii: Array[float], sides: int) -> v
 			var b: int = rings[i][j + 1]
 			var c: int = rings[i + 1][j]
 			var d: int = rings[i + 1][j + 1]
-			buf.tri(a, b, c)
-			buf.tri(b, d, c)
+			buf.tri(a, c, b)
+			buf.tri(b, c, d)
 
 
 ## A root from the foot: out and down, wandering, thinning to nothing.
