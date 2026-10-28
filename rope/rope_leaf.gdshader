@@ -10,6 +10,9 @@ render_mode world_vertex_coords, cull_disabled;
 #include "res://rope/rope.gdshaderinc"
 
 uniform vec3 vel[25];
+// A flutter clock RopeLine runs, quicker in a stronger flow (so a change of speed never makes
+// the phase jump, as TIME times a speed would).
+uniform float clock = 0.0;
 // The water or air's velocity round it (m/s), and which way leaves droop (down, or up when
 // the rope is buoyant).
 uniform vec3 flow = vec3(0.0);
@@ -50,11 +53,11 @@ void vertex() {
 	float push = stream * clamp(ws * 3.0, 0.0, 1.0);
 	d = normalize(d + wd * push * 2.5 + fall_dir * droop * 1.5 + out_dir * 0.05);
 	// (fluttering: rolling about its midrib and nodding, quicker in a stronger flow)
-	float ph = TIME * (2.5 + 3.5 * rnd) * (0.6 + min(ws, 2.0)) + rnd * TAU + t * 7.0;
-	vec3 z = out_dir - d * dot(out_dir, d);
-	float zl = length(z);
-	z = zl > 1e-3 ? z / zl : normalize(cross(d, b));
-	vec3 x = cross(d, z);
+	float ph = clock * (2.5 + 3.5 * rnd) + rnd * TAU + t * 7.0;
+	// (its width across the stem: two guesses summed, never both gone at once, so it never flips)
+	vec3 across = cross(tg, out_dir);
+	vec3 x = normalize(across - d * dot(across, d) + cross(d, out_dir - d * dot(out_dir, d)) + vec3(1e-5));
+	vec3 z = cross(x, d);
 	float roll = flutter * 0.9 * sin(ph);
 	z = z * cos(roll) + x * sin(roll);
 	d = normalize(d + z * flutter * 0.3 * sin(ph * 1.37 + 1.0));
@@ -62,7 +65,7 @@ void vertex() {
 	x = cross(d, z);
 	vec3 local = VERTEX;
 	// (a blade's edges ripple along it; its midrib does not)
-	local.z += ruffle * 0.6 * abs(local.x) * sin(local.y * 22.0 - TIME * 5.0 * (0.5 + min(ws, 2.0)) + rnd * TAU);
+	local.z += ruffle * 0.6 * abs(local.x) * sin(local.y * 22.0 - clock * 5.0 + rnd * TAU);
 	// (curving along its length into the flow, and with its droop)
 	vec3 bow = (wd * push + fall_dir * droop * 0.5) * curl;
 	vec3 foot = p + out_dir * rope_radius(t) * 0.8;

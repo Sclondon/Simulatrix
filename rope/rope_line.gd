@@ -103,6 +103,10 @@ var _leaf_count := 0
 var _flow := Vector3.ZERO
 var _time := 0.0
 var _dt := 1.0 / 60.0
+# (what the leaves are given: each point's velocity smoothed over a few steps, since a Verlet
+# step's own is jittery, and a flutter clock that runs quicker in a stronger flow)
+var _leaf_vel := PackedVector3Array()
+var _leaf_clock := 0.0
 var _bounds := AABB()
 
 static var _noise: FastNoiseLite
@@ -467,6 +471,7 @@ func _physics_process(delta: float) -> void:
 	_step(delta)
 	_carry()
 	if not _sleeping:
+		_settle_leaf_motion(delta)
 		_draw()
 
 
@@ -825,17 +830,28 @@ func _draw() -> void:
 	var r := maxf(style.thickness_root, style.thickness_tip) * (2.5 + style.knot * 2.0)
 	_tube.custom_aabb = _bounds.grow(r + 0.05)
 	if _leaves.visible:
-		var vel := PackedVector3Array()
-		vel.resize(MAX_POINTS)
-		for i in n:
-			vel[i] = (_p[i] - _q[i]) / _dt
+		if _leaf_vel.size() != MAX_POINTS:
+			_leaf_vel.resize(MAX_POINTS)
 		_leaf_mat.set_shader_parameter(&"pts", pts)
 		_leaf_mat.set_shader_parameter(&"nrm", nrm)
-		_leaf_mat.set_shader_parameter(&"vel", vel)
+		_leaf_mat.set_shader_parameter(&"vel", _leaf_vel)
+		_leaf_mat.set_shader_parameter(&"clock", _leaf_clock)
 		_leaf_mat.set_shader_parameter(&"count", n)
 		_leaf_mat.set_shader_parameter(&"rope_length", rest_length())
 		_leaf_mat.set_shader_parameter(&"flow", _flow)
 		_leaves.custom_aabb = _bounds.grow(style.leaf_size * 1.6 + r)
+
+
+func _settle_leaf_motion(delta: float) -> void:
+	if _leaf_vel.size() != MAX_POINTS:
+		_leaf_vel.resize(MAX_POINTS)
+	var k := 1.0 - exp(-10.0 * delta)
+	var rel := 0.0
+	var n := _p.size()
+	for i in n:
+		_leaf_vel[i] = _leaf_vel[i].lerp((_p[i] - _q[i]) / maxf(_dt, 1e-4), k)
+		rel += (_flow - _leaf_vel[i]).length()
+	_leaf_clock += delta * (0.6 + minf(rel / maxi(n, 1), 2.0))
 
 
 ## A tube of `rings` rings of `sides` sides with an end cap at each end, along UV.x (0..1)
